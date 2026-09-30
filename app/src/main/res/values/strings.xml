@@ -1,0 +1,37 @@
+<resources>
+    <string name="app_name">Corretor</string>
+    <string name="ime_name">Teclado Corretor</string>
+    <string name="subtype_pt_br">Português (Brasil)</string>
+    <string name="correct_action">✨ Corrigir</string>
+    <string name="correcting_status">Corrigindo…</string>
+    <string name="settings_title">Configurações</string>
+    <string name="cancel">Cancelar</string>
+    <string name="replace">Substituir</string>
+    <string name="suggestion">Sugestão</string>
+    <string name="original">Original</string>
+    <string name="view_original">Ver original</string>
+    <string name="view_suggestion">Ver sugestão</string>
+    <string name="close">Fechar</string>
+    <string name="no_connection">Sem conexão para corrigir.</string>
+    <string name="timeout_error">Não foi possível corrigir agora.</string>
+    <string name="rate_limited">Limite temporário do serviço. Tente novamente depois.</string>
+    <string name="service_unavailable">Serviço de correção indisponível.</string>
+    <string name="no_text_found">Nenhum texto encontrado para corrigir.</string>
+    <string name="sensitive_field_disabled">Correção desativada em campos de senha.</string>
+    <string name="privacy_consent_title">Privacidade da Correção</string>
+    <string name="privacy_consent_message">Para corrigir o texto, a frase será enviada ao serviço de tradução do Google. O envio só acontece quando você toca em Corrigir.</string>
+    <string name="consent_continue">Continuar</string>
+    <string name="step_1_activate">Passo 1: Ativar teclado</string>
+    <string name="step_1_desc">Ative o Teclado Corretor nas opções de entrada do sistema.</string>
+    <string name="btn_open_ime_settings">Abrir configurações de teclado</string>
+    <string name="step_2_select">Passo 2: Selecionar teclado</string>
+    <string name="step_2_desc">Escolha o Teclado Corretor como teclado padrão ativo.</string>
+    <string name="btn_choose_ime">Escolher teclado</string>
+    <string name="status_ready">Pronto para usar!</string>
+    <string name="status_not_ready">Ainda não configurado</string>
+    <string name="test_correction_title">Testar correção rápida</string>
+    <string name="test_correction_desc">Digite ou escolha um exemplo para ver a correção PT → EN → PT em ação.</string>
+    <string name="btn_test">Testar</string>
+    <string name="diagnostic_mode">Modo de diagnóstico</string>
+    <string name="diagnostic_mode_desc">Registra tempos, código HTTP e texto intermediário em inglês.</string>
+</resources>

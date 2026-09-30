@@ -1,0 +1,6 @@
+{
+  "name": "Corretor",
+  "description": "Teclado Android nativo com correção rápida de texto via tradução em duas etapas (PT-EN-PT).",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
