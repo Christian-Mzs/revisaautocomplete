@@ -69,7 +69,7 @@ class KeyboardInputMethodService : android.inputmethodservice.InputMethodService
         super.onFinishInputView(finishingInput)
         Log.d(TAG, "onFinishInputView: finishingInput=$finishingInput")
         keyboardLayoutView?.dismissPopup()
-        keyboardController.cancelCorrection()
+        keyboardController.cancelAction()
     }
 
     override fun onEvaluateInputViewShown(): Boolean {

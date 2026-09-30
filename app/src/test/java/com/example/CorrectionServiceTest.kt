@@ -16,11 +16,19 @@ class FakeTranslationProvider(
     )
 ) : TranslationProvider {
 
+    var callCount: Int = 0
+        private set
+
+    val calls: MutableList<Triple<String, String, String>> = mutableListOf()
+
     override suspend fun translate(
         text: String,
         sourceLanguage: String,
         targetLanguage: String
     ): TranslationResult {
+        callCount++
+        calls.add(Triple(text, sourceLanguage, targetLanguage))
+
         if (shouldFail) {
             return failureError
         }
@@ -49,15 +57,13 @@ class CorrectionServiceTest {
 
         val service = CorrectionService(provider = fakeProvider)
 
-        val result = service.correct("eu nao sei se ele vai vim", includeDiagnostics = true)
+        val result = service.correct("eu nao sei se ele vai vim")
 
         assertTrue(result.isSuccess)
         assertEquals("eu nao sei se ele vai vim", result.originalText)
         assertEquals("I do not know if he will come", result.intermediateText)
         assertEquals("Eu não sei se ele vai vir.", result.correctedText)
-        assertNotNull(result.diagnosticInfo)
-        assertEquals("I do not know if he will come", result.diagnosticInfo?.intermediateEnglishText)
-        assertEquals("Eu não sei se ele vai vir.", result.diagnosticInfo?.finalResult)
+        assertEquals(2, fakeProvider.callCount)
     }
 
     @Test

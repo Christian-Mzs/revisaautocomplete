@@ -2,7 +2,6 @@ package com.example.ui.keyboard
 
 import android.annotation.SuppressLint
 import android.content.Context
-import android.content.Intent
 import android.content.res.ColorStateList
 import android.graphics.Color
 import android.graphics.Typeface
@@ -16,7 +15,6 @@ import android.view.HapticFeedbackConstants
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
-import android.view.inputmethod.InputMethodManager
 import android.widget.FrameLayout
 import android.widget.HorizontalScrollView
 import android.widget.ImageView
@@ -24,11 +22,14 @@ import android.widget.LinearLayout
 import android.widget.PopupWindow
 import android.widget.ProgressBar
 import android.widget.TextView
-import com.example.MainActivity
-import com.example.ime.CorrectionUiState
+import androidx.core.content.ContextCompat
+import com.example.R
+import com.example.ime.ActionKeyType
 import com.example.ime.KeyboardController
 import com.example.ime.KeyboardMode
 import com.example.ime.ShiftState
+import com.example.ime.TextActionUiState
+import com.example.translation.SupportedLanguages
 
 @SuppressLint("ViewConstructor")
 class KeyboardLayoutView(
@@ -40,7 +41,6 @@ class KeyboardLayoutView(
     private val keyboardKeysContainer: LinearLayout
     private val handler = Handler(Looper.getMainLooper())
 
-    // Accent mappings for Brazilian Portuguese
     private val accentsMap = mapOf(
         'a' to listOf("á", "à", "ã", "â", "ä"),
         'e' to listOf("é", "ê", "è", "ë"),
@@ -53,23 +53,23 @@ class KeyboardLayoutView(
 
     private var activePopup: PopupWindow? = null
 
-    // Colors
-    private val bgColor = Color.parseColor("#18191E")
-    private val keyBgColor = Color.parseColor("#292D36")
-    private val keyActionBgColor = Color.parseColor("#373E4D")
-    private val primaryAccentColor = Color.parseColor("#2563EB")
-    private val successColor = Color.parseColor("#16A34A")
+    // Clean, modern utility color palette (no flashy gradients or AI gimmicks)
+    private val bgColor = Color.parseColor("#17191E")
+    private val keyBgColor = Color.parseColor("#262933")
+    private val keyActionBgColor = Color.parseColor("#343846")
+    private val primaryActionColor = Color.parseColor("#2563EB")
+    private val replaceSuccessColor = Color.parseColor("#15803D")
     private val keyTextColor = Color.parseColor("#FFFFFF")
     private val keySubTextColor = Color.parseColor("#94A3B8")
-    private val pressedColor = Color.parseColor("#4B5563")
+    private val pressedColor = Color.parseColor("#475569")
+    private val pillBorderColor = Color.parseColor("#404656")
 
     init {
         orientation = VERTICAL
         setBackgroundColor(bgColor)
         val pad = dpToPx(4)
-        setPadding(pad, pad, pad, dpToPx(8))
+        setPadding(pad, pad, pad, dpToPx(6))
 
-        // 1. Toolbar area (Dynamic: normal, correcting, preview, consent, error)
         toolbarContainer = FrameLayout(context).apply {
             layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT).apply {
                 bottomMargin = dpToPx(4)
@@ -77,7 +77,6 @@ class KeyboardLayoutView(
         }
         addView(toolbarContainer)
 
-        // 2. Keyboard keys container
         keyboardKeysContainer = LinearLayout(context).apply {
             orientation = VERTICAL
             layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT)
@@ -93,17 +92,18 @@ class KeyboardLayoutView(
     }
 
     // -------------------------------------------------------------
-    // TOOLBAR RENDERING
+    // TOOLBAR RENDERING (Corrigir | Traduzir | Switch IME)
     // -------------------------------------------------------------
     private fun renderToolbar() {
         toolbarContainer.removeAllViews()
 
-        when (val state = controller.correctionUiState) {
-            is CorrectionUiState.Idle -> renderIdleToolbar()
-            is CorrectionUiState.Correcting -> renderCorrectingToolbar()
-            is CorrectionUiState.ConsentRequired -> renderConsentToolbar()
-            is CorrectionUiState.Preview -> renderPreviewToolbar(state)
-            is CorrectionUiState.Error -> renderErrorToolbar(state.message)
+        when (val state = controller.uiState) {
+            is TextActionUiState.Idle -> renderIdleToolbar()
+            is TextActionUiState.SelectingLanguage -> renderLanguageSelectorToolbar()
+            is TextActionUiState.Processing -> renderProcessingToolbar(state.statusMessage)
+            is TextActionUiState.Preview -> renderPreviewToolbar(state)
+            is TextActionUiState.ConsentRequired -> renderConsentToolbar(state.pendingAction)
+            is TextActionUiState.Error -> renderErrorToolbar(state.message)
         }
     }
 
@@ -111,33 +111,30 @@ class KeyboardLayoutView(
         val row = LinearLayout(context).apply {
             orientation = HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, dpToPx(44))
+            layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, dpToPx(42))
         }
 
-        // Corrigir Button
-        val correctButton = LinearLayout(context).apply {
-            orientation = HORIZONTAL
+        val isSens = controller.isSensitiveField
+
+        // 1. "Corrigir" Button (Explicit text)
+        val correctButton = TextView(context).apply {
+            text = context.getString(R.string.correct_action)
+            setTextColor(if (isSens) Color.parseColor("#64748B") else Color.WHITE)
+            textSize = 13.5f
+            typeface = Typeface.DEFAULT_BOLD
             gravity = Gravity.CENTER
-            val isSens = controller.isSensitiveField
             val bg = createRoundedDrawable(
-                if (isSens) Color.parseColor("#334155") else primaryAccentColor,
-                dpToPx(20).toFloat()
+                if (isSens) Color.parseColor("#222631") else keyActionBgColor,
+                dpToPx(18).toFloat(),
+                if (isSens) Color.TRANSPARENT else pillBorderColor,
+                1
             )
             background = RippleDrawable(ColorStateList.valueOf(pressedColor), bg, null)
             val padH = dpToPx(14)
             setPadding(padH, 0, padH, 0)
-            layoutParams = LayoutParams(LayoutParams.WRAP_CONTENT, dpToPx(38)).apply {
+            layoutParams = LayoutParams(LayoutParams.WRAP_CONTENT, dpToPx(36)).apply {
                 marginEnd = dpToPx(8)
             }
-
-            val label = TextView(context).apply {
-                text = if (isSens) "🔒 Campo seguro" else "✨ Corrigir"
-                setTextColor(if (isSens) Color.parseColor("#94A3B8") else Color.WHITE)
-                textSize = 14f
-                typeface = Typeface.DEFAULT_BOLD
-            }
-            addView(label)
-
             setOnClickListener {
                 it.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
                 controller.requestCorrection()
@@ -145,19 +142,48 @@ class KeyboardLayoutView(
         }
         row.addView(correctButton)
 
-        // Spacer
+        // 2. "Traduzir" Button (Explicit text, NOT an icon)
+        val translateButton = TextView(context).apply {
+            text = context.getString(R.string.translate_action)
+            setTextColor(if (isSens) Color.parseColor("#64748B") else Color.WHITE)
+            textSize = 13.5f
+            typeface = Typeface.DEFAULT_BOLD
+            gravity = Gravity.CENTER
+            val bg = createRoundedDrawable(
+                if (isSens) Color.parseColor("#222631") else keyActionBgColor,
+                dpToPx(18).toFloat(),
+                if (isSens) Color.TRANSPARENT else pillBorderColor,
+                1
+            )
+            background = RippleDrawable(ColorStateList.valueOf(pressedColor), bg, null)
+            val padH = dpToPx(14)
+            setPadding(padH, 0, padH, 0)
+            layoutParams = LayoutParams(LayoutParams.WRAP_CONTENT, dpToPx(36)).apply {
+                marginEnd = dpToPx(8)
+            }
+            setOnClickListener {
+                it.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                controller.requestTranslationPicker()
+            }
+        }
+        row.addView(translateButton)
+
+        // Flexible spacer
         val spacer = View(context).apply {
             layoutParams = LayoutParams(0, LayoutParams.MATCH_PARENT, 1f)
         }
         row.addView(spacer)
 
-        // Switch Keyboard (IME Picker) Button
-        val switchImeBtn = TextView(context).apply {
-            text = "🌐"
-            textSize = 18f
-            gravity = Gravity.CENTER
-            background = RippleDrawable(ColorStateList.valueOf(pressedColor), null, null)
-            layoutParams = LayoutParams(dpToPx(40), dpToPx(40))
+        // 3. Switch Keyboard Icon Button (Clean keyboard silhouette, NOT a translation globe)
+        val switchImeBtn = FrameLayout(context).apply {
+            layoutParams = LayoutParams(dpToPx(38), dpToPx(36))
+            val bg = createRoundedDrawable(Color.TRANSPARENT, dpToPx(6).toFloat())
+            background = RippleDrawable(ColorStateList.valueOf(pressedColor), bg, null)
+            val iconView = ImageView(context).apply {
+                setImageDrawable(ContextCompat.getDrawable(context, R.drawable.ic_switch_keyboard))
+                layoutParams = FrameLayout.LayoutParams(dpToPx(20), dpToPx(20), Gravity.CENTER)
+            }
+            addView(iconView)
             setOnClickListener {
                 it.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
                 controller.onSwitchImeRequested()
@@ -165,46 +191,118 @@ class KeyboardLayoutView(
         }
         row.addView(switchImeBtn)
 
-        // Settings Button
-        val settingsBtn = TextView(context).apply {
-            text = "⚙️"
-            textSize = 18f
-            gravity = Gravity.CENTER
-            background = RippleDrawable(ColorStateList.valueOf(pressedColor), null, null)
-            layoutParams = LayoutParams(dpToPx(40), dpToPx(40))
-            setOnClickListener {
-                it.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
-                val intent = Intent(context, MainActivity::class.java).apply {
-                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
-                }
-                context.startActivity(intent)
-            }
-        }
-        row.addView(settingsBtn)
-
         toolbarContainer.addView(row)
     }
 
-    private fun renderCorrectingToolbar() {
+    private fun renderLanguageSelectorToolbar() {
+        val container = LinearLayout(context).apply {
+            orientation = VERTICAL
+            val bg = createRoundedDrawable(Color.parseColor("#1E222B"), dpToPx(8).toFloat(), pillBorderColor, 1)
+            background = bg
+            setPadding(dpToPx(8), dpToPx(4), dpToPx(8), dpToPx(4))
+            layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT)
+        }
+
+        // Header with title and close
+        val header = LinearLayout(context).apply {
+            orientation = HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT)
+        }
+
+        val title = TextView(context).apply {
+            text = context.getString(R.string.translate_to_title)
+            setTextColor(keySubTextColor)
+            textSize = 12f
+            typeface = Typeface.DEFAULT_BOLD
+            layoutParams = LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f)
+        }
+        header.addView(title)
+
+        val closeBtn = TextView(context).apply {
+            text = "✕"
+            setTextColor(keySubTextColor)
+            textSize = 14f
+            val pad = dpToPx(6)
+            setPadding(pad, pad, pad, pad)
+            setOnClickListener {
+                it.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                controller.cancelAction()
+            }
+        }
+        header.addView(closeBtn)
+        container.addView(header)
+
+        // Horizontal scrollable list of languages (last used language is first and highlighted)
+        val lastLang = controller.consentManager.getLastTranslationLanguageCode()
+        val sortedLanguages = SupportedLanguages.getSortedWithPreferred(lastLang)
+
+        val scroll = HorizontalScrollView(context).apply {
+            isHorizontalScrollBarEnabled = false
+            layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT).apply {
+                topMargin = dpToPx(2)
+                bottomMargin = dpToPx(2)
+            }
+        }
+
+        val langRow = LinearLayout(context).apply {
+            orientation = HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+
+        for (lang in sortedLanguages) {
+            val isPreferred = lang.languageCode.equals(lastLang, ignoreCase = true)
+            val pill = TextView(context).apply {
+                text = lang.displayName
+                textSize = 12.5f
+                setTextColor(Color.WHITE)
+                typeface = if (isPreferred) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
+                val bg = createRoundedDrawable(
+                    if (isPreferred) primaryActionColor else keyBgColor,
+                    dpToPx(14).toFloat(),
+                    if (isPreferred) Color.TRANSPARENT else pillBorderColor,
+                    1
+                )
+                background = RippleDrawable(ColorStateList.valueOf(pressedColor), bg, null)
+                val padH = dpToPx(12)
+                setPadding(padH, dpToPx(6), padH, dpToPx(6))
+                layoutParams = LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT).apply {
+                    marginEnd = dpToPx(6)
+                }
+                setOnClickListener {
+                    it.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                    controller.selectLanguageAndTranslate(lang.languageCode)
+                }
+            }
+            langRow.addView(pill)
+        }
+
+        scroll.addView(langRow)
+        container.addView(scroll)
+
+        toolbarContainer.addView(container)
+    }
+
+    private fun renderProcessingToolbar(statusMessage: String) {
         val row = LinearLayout(context).apply {
             orientation = HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            val bg = createRoundedDrawable(Color.parseColor("#1E293B"), dpToPx(8).toFloat())
+            val bg = createRoundedDrawable(Color.parseColor("#1E222B"), dpToPx(8).toFloat())
             background = bg
             setPadding(dpToPx(12), dpToPx(6), dpToPx(12), dpToPx(6))
-            layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT)
+            layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, dpToPx(42))
         }
 
         val progressBar = ProgressBar(context).apply {
             isIndeterminate = true
-            layoutParams = LayoutParams(dpToPx(20), dpToPx(20)).apply {
+            layoutParams = LayoutParams(dpToPx(18), dpToPx(18)).apply {
                 marginEnd = dpToPx(10)
             }
         }
         row.addView(progressBar)
 
         val statusText = TextView(context).apply {
-            text = "Corrigindo via tradução (PT → EN → PT)…"
+            text = statusMessage
             setTextColor(Color.WHITE)
             textSize = 13f
             layoutParams = LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f)
@@ -212,15 +310,15 @@ class KeyboardLayoutView(
         row.addView(statusText)
 
         val cancelBtn = TextView(context).apply {
-            text = "Cancelar"
-            setTextColor(Color.parseColor("#F87171"))
+            text = context.getString(R.string.cancel)
+            setTextColor(Color.parseColor("#EF4444"))
             textSize = 13f
             typeface = Typeface.DEFAULT_BOLD
             val pad = dpToPx(6)
             setPadding(pad, pad, pad, pad)
             setOnClickListener {
                 it.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
-                controller.cancelCorrection()
+                controller.cancelAction()
             }
         }
         row.addView(cancelBtn)
@@ -228,17 +326,116 @@ class KeyboardLayoutView(
         toolbarContainer.addView(row)
     }
 
-    private fun renderConsentToolbar() {
+    private fun renderPreviewToolbar(state: TextActionUiState.Preview) {
         val card = LinearLayout(context).apply {
             orientation = VERTICAL
-            val bg = createRoundedDrawable(Color.parseColor("#1E293B"), dpToPx(10).toFloat(), Color.parseColor("#3B82F6"), 2)
+            val bg = createRoundedDrawable(Color.parseColor("#1B1F28"), dpToPx(8).toFloat(), primaryActionColor, 1)
+            background = bg
+            setPadding(dpToPx(10), dpToPx(6), dpToPx(10), dpToPx(6))
+            layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT)
+        }
+
+        // Header: Title and Toggle
+        val header = LinearLayout(context).apply {
+            orientation = HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT)
+        }
+
+        val title = TextView(context).apply {
+            text = if (state.isShowingOriginal) "Original" else state.title
+            setTextColor(if (state.isShowingOriginal) Color.parseColor("#F59E0B") else Color.parseColor("#60A5FA"))
+            textSize = 12f
+            typeface = Typeface.DEFAULT_BOLD
+            layoutParams = LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f)
+        }
+        header.addView(title)
+
+        val toggleBtn = TextView(context).apply {
+            text = if (state.isShowingOriginal) context.getString(R.string.view_result) else context.getString(R.string.view_original)
+            setTextColor(Color.parseColor("#93C5FD"))
+            textSize = 11.5f
+            setPadding(dpToPx(6), dpToPx(2), dpToPx(6), dpToPx(2))
+            setOnClickListener {
+                it.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                controller.togglePreviewOriginal()
+            }
+        }
+        header.addView(toggleBtn)
+        card.addView(header)
+
+        // Text Scroll
+        val previewScroll = HorizontalScrollView(context).apply {
+            layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT).apply {
+                topMargin = dpToPx(2)
+                bottomMargin = dpToPx(6)
+            }
+        }
+
+        val textContent = TextView(context).apply {
+            val textToDisplay = if (state.isShowingOriginal) state.originalText else state.resultText
+            text = textToDisplay
+            setTextColor(Color.WHITE)
+            textSize = 14f
+            maxLines = 3
+        }
+        previewScroll.addView(textContent)
+        card.addView(previewScroll)
+
+        // Actions Row
+        val actionsRow = LinearLayout(context).apply {
+            orientation = HORIZONTAL
+            gravity = Gravity.END
+            layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT)
+        }
+
+        val cancelBtn = TextView(context).apply {
+            text = context.getString(R.string.cancel)
+            setTextColor(keySubTextColor)
+            textSize = 12.5f
+            val bg = createRoundedDrawable(Color.parseColor("#2D323F"), dpToPx(6).toFloat())
+            background = RippleDrawable(ColorStateList.valueOf(pressedColor), bg, null)
+            setPadding(dpToPx(12), dpToPx(6), dpToPx(12), dpToPx(6))
+            layoutParams = LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT).apply {
+                marginEnd = dpToPx(8)
+            }
+            setOnClickListener {
+                it.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                controller.cancelAction()
+            }
+        }
+        actionsRow.addView(cancelBtn)
+
+        val replaceBtn = TextView(context).apply {
+            text = context.getString(R.string.replace)
+            setTextColor(Color.WHITE)
+            typeface = Typeface.DEFAULT_BOLD
+            textSize = 12.5f
+            val bg = createRoundedDrawable(replaceSuccessColor, dpToPx(6).toFloat())
+            background = RippleDrawable(ColorStateList.valueOf(pressedColor), bg, null)
+            setPadding(dpToPx(16), dpToPx(6), dpToPx(16), dpToPx(6))
+            setOnClickListener {
+                it.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                controller.applyResult()
+            }
+        }
+        actionsRow.addView(replaceBtn)
+
+        card.addView(actionsRow)
+        toolbarContainer.addView(card)
+    }
+
+    private fun renderConsentToolbar(pendingAction: TextActionUiState.PendingAction) {
+        val card = LinearLayout(context).apply {
+            orientation = VERTICAL
+            val bg = createRoundedDrawable(Color.parseColor("#1B1F28"), dpToPx(8).toFloat(), primaryActionColor, 1)
             background = bg
             setPadding(dpToPx(12), dpToPx(8), dpToPx(12), dpToPx(8))
             layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT)
         }
 
         val title = TextView(context).apply {
-            text = "Privacidade da Correção"
+            text = context.getString(R.string.privacy_consent_title)
             setTextColor(Color.WHITE)
             textSize = 13f
             typeface = Typeface.DEFAULT_BOLD
@@ -246,7 +443,7 @@ class KeyboardLayoutView(
         card.addView(title)
 
         val desc = TextView(context).apply {
-            text = "Para corrigir o texto, a frase será enviada ao serviço de tradução do Google. O envio só acontece quando você toca em Corrigir."
+            text = context.getString(R.string.privacy_consent_message)
             setTextColor(Color.parseColor("#CBD5E1"))
             textSize = 11.5f
             layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT).apply {
@@ -263,28 +460,28 @@ class KeyboardLayoutView(
         }
 
         val cancelBtn = TextView(context).apply {
-            text = "Cancelar"
-            setTextColor(Color.parseColor("#94A3B8"))
+            text = context.getString(R.string.cancel)
+            setTextColor(keySubTextColor)
             textSize = 13f
             setPadding(dpToPx(12), dpToPx(6), dpToPx(12), dpToPx(6))
             setOnClickListener {
                 it.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
-                controller.declineConsent()
+                controller.cancelAction()
             }
         }
         btnRow.addView(cancelBtn)
 
         val continueBtn = TextView(context).apply {
-            text = "Continuar"
+            text = context.getString(R.string.consent_continue)
             setTextColor(Color.WHITE)
             typeface = Typeface.DEFAULT_BOLD
             textSize = 13f
-            val bg = createRoundedDrawable(primaryAccentColor, dpToPx(6).toFloat())
+            val bg = createRoundedDrawable(primaryActionColor, dpToPx(6).toFloat())
             background = RippleDrawable(ColorStateList.valueOf(pressedColor), bg, null)
             setPadding(dpToPx(14), dpToPx(6), dpToPx(14), dpToPx(6))
             setOnClickListener {
                 it.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
-                controller.acceptConsentAndCorrect()
+                controller.acceptConsentAndProceed(pendingAction)
             }
         }
         btnRow.addView(continueBtn)
@@ -293,123 +490,18 @@ class KeyboardLayoutView(
         toolbarContainer.addView(card)
     }
 
-    private fun renderPreviewToolbar(state: CorrectionUiState.Preview) {
-        val card = LinearLayout(context).apply {
-            orientation = VERTICAL
-            val bg = createRoundedDrawable(Color.parseColor("#1E293B"), dpToPx(10).toFloat(), Color.parseColor("#10B981"), 2)
-            background = bg
-            setPadding(dpToPx(10), dpToPx(6), dpToPx(10), dpToPx(6))
-            layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT)
-        }
-
-        // Header: Title & Toggle Original
-        val header = LinearLayout(context).apply {
-            orientation = HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT)
-        }
-
-        val title = TextView(context).apply {
-            text = if (state.isShowingOriginal) "Original:" else "✨ Sugestão de correção:"
-            setTextColor(if (state.isShowingOriginal) Color.parseColor("#F59E0B") else Color.parseColor("#34D399"))
-            textSize = 12f
-            typeface = Typeface.DEFAULT_BOLD
-            layoutParams = LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f)
-        }
-        header.addView(title)
-
-        val toggleBtn = TextView(context).apply {
-            text = if (state.isShowingOriginal) "Ver sugestão" else "Ver original"
-            setTextColor(Color.parseColor("#60A5FA"))
-            textSize = 11.5f
-            setPadding(dpToPx(6), dpToPx(2), dpToPx(6), dpToPx(2))
-            setOnClickListener {
-                it.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
-                controller.togglePreviewOriginal()
-            }
-        }
-        header.addView(toggleBtn)
-        card.addView(header)
-
-        // Text Display
-        val previewScroll = HorizontalScrollView(context).apply {
-            layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT).apply {
-                topMargin = dpToPx(2)
-                bottomMargin = dpToPx(6)
-            }
-        }
-
-        val textContent = TextView(context).apply {
-            val displayText = if (state.isShowingOriginal) {
-                state.result.originalText
-            } else {
-                state.result.correctedText ?: ""
-            }
-            text = displayText
-            setTextColor(Color.WHITE)
-            textSize = 14f
-            maxLines = 3
-        }
-        previewScroll.addView(textContent)
-        card.addView(previewScroll)
-
-        // Action Buttons Row
-        val actionsRow = LinearLayout(context).apply {
-            orientation = HORIZONTAL
-            gravity = Gravity.END
-            layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT)
-        }
-
-        // Cancel button
-        val cancelBtn = TextView(context).apply {
-            text = "✕ Cancelar"
-            setTextColor(Color.parseColor("#94A3B8"))
-            textSize = 12.5f
-            val bg = createRoundedDrawable(Color.parseColor("#334155"), dpToPx(6).toFloat())
-            background = RippleDrawable(ColorStateList.valueOf(pressedColor), bg, null)
-            setPadding(dpToPx(12), dpToPx(6), dpToPx(12), dpToPx(6))
-            layoutParams = LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT).apply {
-                marginEnd = dpToPx(8)
-            }
-            setOnClickListener {
-                it.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
-                controller.cancelCorrection()
-            }
-        }
-        actionsRow.addView(cancelBtn)
-
-        // Replace button
-        val replaceBtn = TextView(context).apply {
-            text = "✓ Substituir"
-            setTextColor(Color.WHITE)
-            typeface = Typeface.DEFAULT_BOLD
-            textSize = 12.5f
-            val bg = createRoundedDrawable(successColor, dpToPx(6).toFloat())
-            background = RippleDrawable(ColorStateList.valueOf(pressedColor), bg, null)
-            setPadding(dpToPx(16), dpToPx(6), dpToPx(16), dpToPx(6))
-            setOnClickListener {
-                it.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
-                controller.applyCorrection()
-            }
-        }
-        actionsRow.addView(replaceBtn)
-
-        card.addView(actionsRow)
-        toolbarContainer.addView(card)
-    }
-
     private fun renderErrorToolbar(message: String) {
         val row = LinearLayout(context).apply {
             orientation = HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            val bg = createRoundedDrawable(Color.parseColor("#3B1B1B"), dpToPx(8).toFloat(), Color.parseColor("#EF4444"), 1)
+            val bg = createRoundedDrawable(Color.parseColor("#341818"), dpToPx(8).toFloat(), Color.parseColor("#EF4444"), 1)
             background = bg
             setPadding(dpToPx(12), dpToPx(6), dpToPx(12), dpToPx(6))
             layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT)
         }
 
         val errorText = TextView(context).apply {
-            text = "⚠️ $message"
+            text = message
             setTextColor(Color.parseColor("#FCA5A5"))
             textSize = 12.5f
             layoutParams = LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f)
@@ -417,7 +509,7 @@ class KeyboardLayoutView(
         row.addView(errorText)
 
         val closeBtn = TextView(context).apply {
-            text = "Fechar"
+            text = context.getString(R.string.close)
             setTextColor(Color.WHITE)
             textSize = 12f
             setPadding(dpToPx(8), dpToPx(4), dpToPx(8), dpToPx(4))
@@ -461,11 +553,10 @@ class KeyboardLayoutView(
             }
         }
 
-        // Shift Key
         val shiftBgColor = when (controller.shiftState) {
             ShiftState.OFF -> keyActionBgColor
-            ShiftState.ON -> primaryAccentColor
-            ShiftState.CAPS_LOCK -> Color.parseColor("#F59E0B")
+            ShiftState.ON -> primaryActionColor
+            ShiftState.CAPS_LOCK -> Color.parseColor("#2563EB")
         }
         val shiftLabel = when (controller.shiftState) {
             ShiftState.OFF -> "⇧"
@@ -477,46 +568,37 @@ class KeyboardLayoutView(
         }
         r3.addView(shiftKey)
 
-        // Middle letters
         val r3Letters = listOf("z", "x", "c", "v", "b", "n", "m")
         for (char in r3Letters) {
             r3.addView(createLetterKey(char, 1.0f))
         }
 
-        // Backspace Key
         val backspaceKey = createRepeatKey("⌫", 1.4f, keyActionBgColor, onAction = {
             controller.handleBackspace()
         })
         r3.addView(backspaceKey)
         keyboardKeysContainer.addView(r3)
 
-        // Row 4: [?123] [ , ] [ Espaço ] [ . ] [ Enter ]
+        // Row 4: [?123] [ , ] [ Espaço ] [ . ] [ Action Key ]
         val r4 = LinearLayout(context).apply {
             orientation = HORIZONTAL
             layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, dpToPx(48))
         }
 
-        // Mode Switch (?123)
         val numModeKey = createSpecialKey("?123", 1.4f, keyActionBgColor) {
             controller.setMode(KeyboardMode.NUMBERS)
         }
         r4.addView(numModeKey)
 
-        // Comma
         r4.addView(createDirectCharKey(",", 1.0f))
-
-        // Spacebar
-        val spaceKey = createSpaceKey("espaço", 4.2f)
-        r4.addView(spaceKey)
-
-        // Period
+        r4.addView(createSpaceKey("espaço", 4.2f))
         r4.addView(createDirectCharKey(".", 1.0f))
 
-        // Enter
-        val enterKey = createSpecialKey("⏎", 1.4f, primaryAccentColor) {
+        // Vector-based Action Key (Enter / Search / Send / Done / Go)
+        val actionKey = createActionKey(1.4f, primaryActionColor) {
             controller.handleEnter()
         }
-        r4.addView(enterKey)
+        r4.addView(actionKey)
 
         keyboardKeysContainer.addView(r4)
     }
@@ -554,7 +636,7 @@ class KeyboardLayoutView(
         r3.addView(backspaceKey)
         keyboardKeysContainer.addView(r3)
 
-        // Row 4: [ABC] [ , ] [ Espaço ] [ . ] [ Enter ]
+        // Row 4: [ABC] [ , ] [ Espaço ] [ . ] [ Action Key ]
         val r4 = LinearLayout(context).apply {
             orientation = HORIZONTAL
             layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, dpToPx(48))
@@ -569,10 +651,10 @@ class KeyboardLayoutView(
         r4.addView(createSpaceKey("espaço", 4.2f))
         r4.addView(createDirectCharKey(".", 1.0f))
 
-        val enterKey = createSpecialKey("⏎", 1.4f, primaryAccentColor) {
+        val actionKey = createActionKey(1.4f, primaryActionColor) {
             controller.handleEnter()
         }
-        r4.addView(enterKey)
+        r4.addView(actionKey)
 
         keyboardKeysContainer.addView(r4)
     }
@@ -610,7 +692,7 @@ class KeyboardLayoutView(
         r3.addView(backspaceKey)
         keyboardKeysContainer.addView(r3)
 
-        // Row 4: [ABC] [ , ] [ Espaço ] [ . ] [ Enter ]
+        // Row 4: [ABC] [ , ] [ Espaço ] [ . ] [ Action Key ]
         val r4 = LinearLayout(context).apply {
             orientation = HORIZONTAL
             layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, dpToPx(48))
@@ -625,16 +707,16 @@ class KeyboardLayoutView(
         r4.addView(createSpaceKey("espaço", 4.2f))
         r4.addView(createDirectCharKey(".", 1.0f))
 
-        val enterKey = createSpecialKey("⏎", 1.4f, primaryAccentColor) {
+        val actionKey = createActionKey(1.4f, primaryActionColor) {
             controller.handleEnter()
         }
-        r4.addView(enterKey)
+        r4.addView(actionKey)
 
         keyboardKeysContainer.addView(r4)
     }
 
     // -------------------------------------------------------------
-    // KEY VIEW BUILDERS
+    // KEY BUILDERS
     // -------------------------------------------------------------
     private fun createKeyRow(chars: List<String>): LinearLayout {
         return LinearLayout(context).apply {
@@ -682,12 +764,10 @@ class KeyboardLayoutView(
         }
         frame.addView(tv)
 
-        // Check if accents exist for this letter
         val lowerChar = char.lowercase().firstOrNull() ?: ' '
         val accents = accentsMap[lowerChar]
 
         if (!accents.isNullOrEmpty()) {
-            // Subtle dot or hint indicator
             val hint = TextView(context).apply {
                 text = "·"
                 setTextColor(keySubTextColor)
@@ -701,7 +781,6 @@ class KeyboardLayoutView(
             }
             frame.addView(hint)
 
-            // Setup Long Press for Accents
             frame.setOnLongClickListener {
                 it.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
                 showAccentsPopup(it, accents, isShifted)
@@ -768,6 +847,44 @@ class KeyboardLayoutView(
             layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT)
         }
         frame.addView(tv)
+
+        frame.setOnClickListener {
+            it.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+            onClick()
+        }
+
+        return frame
+    }
+
+    private fun createActionKey(
+        weight: Float,
+        backgroundColor: Int,
+        onClick: () -> Unit
+    ): View {
+        val frame = FrameLayout(context).apply {
+            layoutParams = LayoutParams(0, LayoutParams.MATCH_PARENT, weight).apply {
+                val m = dpToPx(2)
+                setMargins(m, 0, m, 0)
+            }
+            val bg = createRoundedDrawable(backgroundColor, dpToPx(6).toFloat())
+            background = RippleDrawable(ColorStateList.valueOf(pressedColor), bg, null)
+        }
+
+        val actionType = controller.getActionKeyType()
+        val drawableRes = when (actionType) {
+            ActionKeyType.SEARCH -> R.drawable.ic_action_search
+            ActionKeyType.SEND -> R.drawable.ic_action_send
+            ActionKeyType.DONE -> R.drawable.ic_action_done
+            ActionKeyType.GO, ActionKeyType.NEXT -> R.drawable.ic_action_go
+            ActionKeyType.ENTER -> R.drawable.ic_action_enter
+        }
+
+        val iv = ImageView(context).apply {
+            setImageDrawable(ContextCompat.getDrawable(context, drawableRes))
+            setColorFilter(Color.WHITE)
+            layoutParams = FrameLayout.LayoutParams(dpToPx(22), dpToPx(22), Gravity.CENTER)
+        }
+        frame.addView(iv)
 
         frame.setOnClickListener {
             it.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
@@ -869,7 +986,7 @@ class KeyboardLayoutView(
 
         val popupView = LinearLayout(context).apply {
             orientation = HORIZONTAL
-            val bg = createRoundedDrawable(Color.parseColor("#1E222B"), dpToPx(8).toFloat(), Color.parseColor("#475569"), 1)
+            val bg = createRoundedDrawable(Color.parseColor("#1B1F28"), dpToPx(8).toFloat(), Color.parseColor("#383E4C"), 1)
             background = bg
             setPadding(dpToPx(6), dpToPx(6), dpToPx(6), dpToPx(6))
         }
@@ -889,7 +1006,7 @@ class KeyboardLayoutView(
                 textSize = 20f
                 setTextColor(Color.WHITE)
                 gravity = Gravity.CENTER
-                val bg = createRoundedDrawable(Color.parseColor("#334155"), dpToPx(6).toFloat())
+                val bg = createRoundedDrawable(Color.parseColor("#2B2F3A"), dpToPx(6).toFloat())
                 background = RippleDrawable(ColorStateList.valueOf(pressedColor), bg, null)
                 layoutParams = LayoutParams(dpToPx(42), dpToPx(42)).apply {
                     val m = dpToPx(2)
@@ -909,7 +1026,6 @@ class KeyboardLayoutView(
         val location = IntArray(2)
         anchor.getLocationOnScreen(location)
 
-        // Show above the anchor key
         popup.showAtLocation(
             anchor,
             Gravity.NO_GRAVITY,
@@ -923,9 +1039,6 @@ class KeyboardLayoutView(
         activePopup = null
     }
 
-    // -------------------------------------------------------------
-    // UTILS
-    // -------------------------------------------------------------
     private fun dpToPx(dp: Int): Int {
         return TypedValue.applyDimension(
             TypedValue.COMPLEX_UNIT_DIP,

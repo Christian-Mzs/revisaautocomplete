@@ -12,7 +12,7 @@ import android.view.inputmethod.InputContentInfo
 import kotlin.math.max
 import kotlin.math.min
 
-class FakeInputConnection(
+open class FakeInputConnection(
     initialText: String = "",
     initialCursor: Int = initialText.length,
     initialSelectionEnd: Int = initialCursor

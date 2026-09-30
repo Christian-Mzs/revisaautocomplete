@@ -1,14 +1,14 @@
 package com.example.ime
 
 import android.content.Context
-import android.os.Handler
-import android.os.Looper
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputConnection
-import com.example.correction.CorrectionResult
 import com.example.correction.CorrectionService
 import com.example.privacy.SensitiveFieldDetector
 import com.example.privacy.TranslationConsentManager
+import com.example.translation.SupportedLanguages
+import com.example.translation.TranslationResult
+import com.example.translation.TranslationService
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -27,23 +27,21 @@ enum class ShiftState {
     CAPS_LOCK
 }
 
-sealed class CorrectionUiState {
-    object Idle : CorrectionUiState()
-    object ConsentRequired : CorrectionUiState()
-    data class Correcting(val cancelJob: Job) : CorrectionUiState()
-    data class Preview(
-        val result: CorrectionResult,
-        val extractedSentence: ExtractedSentence,
-        var isShowingOriginal: Boolean = false
-    ) : CorrectionUiState()
-    data class Error(val message: String) : CorrectionUiState()
+enum class ActionKeyType {
+    SEARCH,
+    SEND,
+    DONE,
+    GO,
+    NEXT,
+    ENTER
 }
 
 class KeyboardController(
     private val context: Context,
     private val coroutineScope: CoroutineScope,
-    private val correctionService: CorrectionService = CorrectionService(),
-    private val consentManager: TranslationConsentManager = TranslationConsentManager.getInstance(context),
+    private val translationService: TranslationService = TranslationService(),
+    private val correctionService: CorrectionService = CorrectionService(translationService),
+    val consentManager: TranslationConsentManager = TranslationConsentManager.getInstance(context),
     private val onStateChanged: () -> Unit,
     val onSwitchImeRequested: () -> Unit = {}
 ) {
@@ -54,11 +52,12 @@ class KeyboardController(
     var shiftState: ShiftState = ShiftState.OFF
         private set
 
-    var correctionUiState: CorrectionUiState = CorrectionUiState.Idle
+    var uiState: TextActionUiState = TextActionUiState.Idle
         private set
 
     private var inputConnection: InputConnection? = null
-    private var currentEditorInfo: EditorInfo? = null
+    var currentEditorInfo: EditorInfo? = null
+        private set
 
     private var lastShiftPressTime: Long = 0
 
@@ -68,9 +67,8 @@ class KeyboardController(
     fun updateInputConnection(ic: InputConnection?, editorInfo: EditorInfo?) {
         this.inputConnection = ic
         this.currentEditorInfo = editorInfo
-        // If current state was preview or error, reset to idle when focus changes
-        if (correctionUiState !is CorrectionUiState.Correcting) {
-            correctionUiState = CorrectionUiState.Idle
+        if (uiState !is TextActionUiState.Processing) {
+            uiState = TextActionUiState.Idle
         }
         onStateChanged()
     }
@@ -80,10 +78,8 @@ class KeyboardController(
             ShiftState.CAPS_LOCK, ShiftState.ON -> char.uppercase()
             ShiftState.OFF -> char.lowercase()
         }
-
         inputConnection?.commitText(textToInsert, 1)
 
-        // If shift was ON (single character uppercase), revert to OFF
         if (shiftState == ShiftState.ON) {
             shiftState = ShiftState.OFF
             onStateChanged()
@@ -119,9 +115,20 @@ class KeyboardController(
                 return
             }
         }
-
-        // Default newline
         ic.commitText("\n", 1)
+    }
+
+    fun getActionKeyType(): ActionKeyType {
+        val info = currentEditorInfo ?: return ActionKeyType.ENTER
+        val action = info.imeOptions and EditorInfo.IME_MASK_ACTION
+        return when (action) {
+            EditorInfo.IME_ACTION_SEARCH -> ActionKeyType.SEARCH
+            EditorInfo.IME_ACTION_SEND -> ActionKeyType.SEND
+            EditorInfo.IME_ACTION_DONE -> ActionKeyType.DONE
+            EditorInfo.IME_ACTION_GO -> ActionKeyType.GO
+            EditorInfo.IME_ACTION_NEXT -> ActionKeyType.NEXT
+            else -> ActionKeyType.ENTER
+        }
     }
 
     fun toggleShift() {
@@ -129,7 +136,6 @@ class KeyboardController(
         shiftState = when (shiftState) {
             ShiftState.OFF -> ShiftState.ON
             ShiftState.ON -> {
-                // If tapped twice quickly (within 400ms), lock caps
                 if (now - lastShiftPressTime < 400) {
                     ShiftState.CAPS_LOCK
                 } else {
@@ -147,105 +153,177 @@ class KeyboardController(
         onStateChanged()
     }
 
+    // -------------------------------------------------------------
+    // CORRECTION FLOW
+    // -------------------------------------------------------------
     fun requestCorrection() {
+        // SECURITY CHECK: Block before reading any text or calling network
         if (isSensitiveField) {
-            correctionUiState = CorrectionUiState.Error("Correção desativada em campos de senha.")
+            uiState = TextActionUiState.Error("Desativado em campos de senha.")
             onStateChanged()
             return
         }
 
-        // Privacy check
         if (!consentManager.hasAcceptedConsent()) {
-            correctionUiState = CorrectionUiState.ConsentRequired
+            uiState = TextActionUiState.ConsentRequired(TextActionUiState.PendingAction.Correction)
             onStateChanged()
             return
         }
 
         executeCorrection()
-    }
-
-    fun acceptConsentAndCorrect() {
-        consentManager.setConsentAccepted(true)
-        executeCorrection()
-    }
-
-    fun declineConsent() {
-        correctionUiState = CorrectionUiState.Idle
-        onStateChanged()
     }
 
     private fun executeCorrection() {
+        if (isSensitiveField) return
+
         val ic = inputConnection
         if (ic == null) {
-            correctionUiState = CorrectionUiState.Error("Não foi possível acessar o texto.")
+            uiState = TextActionUiState.Error("Não foi possível acessar o texto.")
             onStateChanged()
             return
         }
 
         val extracted = SentenceExtractor.extract(ic)
         if (extracted == null || extracted.textToCorrect.isBlank()) {
-            correctionUiState = CorrectionUiState.Error("Nenhum texto encontrado para corrigir.")
+            uiState = TextActionUiState.Error("Nenhum texto encontrado.")
             onStateChanged()
             return
         }
 
-        val isDiag = consentManager.isDiagnosticModeEnabled()
-
         val job = coroutineScope.launch {
-            val result = correctionService.correct(
-                originalText = extracted.textToCorrect,
-                includeDiagnostics = isDiag
-            )
+            val result = correctionService.correct(extracted.textToCorrect)
 
             withContext(Dispatchers.Main) {
                 if (result.isSuccess && !result.correctedText.isNullOrBlank()) {
-                    correctionUiState = CorrectionUiState.Preview(
-                        result = result,
-                        extractedSentence = extracted,
-                        isShowingOriginal = false
+                    uiState = TextActionUiState.Preview(
+                        title = "Correção",
+                        originalText = extracted.textToCorrect,
+                        resultText = result.correctedText,
+                        extractedSentence = extracted
                     )
                 } else {
                     val errMsg = result.errorMessage ?: "Não foi possível corrigir agora."
-                    correctionUiState = CorrectionUiState.Error(errMsg)
+                    uiState = TextActionUiState.Error(errMsg)
                 }
                 onStateChanged()
             }
         }
 
-        correctionUiState = CorrectionUiState.Correcting(job)
+        uiState = TextActionUiState.Processing("Corrigindo…", job)
         onStateChanged()
     }
 
-    fun cancelCorrection() {
-        if (correctionUiState is CorrectionUiState.Correcting) {
-            (correctionUiState as CorrectionUiState.Correcting).cancelJob.cancel()
+    // -------------------------------------------------------------
+    // TRANSLATION FLOW
+    // -------------------------------------------------------------
+    fun requestTranslationPicker() {
+        // SECURITY CHECK: Block before reading any text or calling network
+        if (isSensitiveField) {
+            uiState = TextActionUiState.Error("Desativado em campos de senha.")
+            onStateChanged()
+            return
         }
-        correctionUiState = CorrectionUiState.Idle
+
+        if (!consentManager.hasAcceptedConsent()) {
+            val preferredLang = consentManager.getLastTranslationLanguageCode()
+            uiState = TextActionUiState.ConsentRequired(TextActionUiState.PendingAction.Translation(preferredLang))
+            onStateChanged()
+            return
+        }
+
+        uiState = TextActionUiState.SelectingLanguage
         onStateChanged()
     }
 
-    fun applyCorrection() {
-        val state = correctionUiState as? CorrectionUiState.Preview ?: return
-        val corrected = state.result.correctedText ?: return
+    fun selectLanguageAndTranslate(targetLanguageCode: String) {
+        // SECURITY CHECK
+        if (isSensitiveField) return
 
+        consentManager.setLastTranslationLanguageCode(targetLanguageCode)
+
+        val ic = inputConnection
+        if (ic == null) {
+            uiState = TextActionUiState.Error("Não foi possível acessar o texto.")
+            onStateChanged()
+            return
+        }
+
+        val extracted = SentenceExtractor.extract(ic)
+        if (extracted == null || extracted.textToCorrect.isBlank()) {
+            uiState = TextActionUiState.Error("Nenhum texto encontrado.")
+            onStateChanged()
+            return
+        }
+
+        val langName = SupportedLanguages.find(targetLanguageCode)?.displayName ?: targetLanguageCode
+
+        val job = coroutineScope.launch {
+            val result = translationService.translate(
+                text = extracted.textToCorrect,
+                sourceLanguage = "auto",
+                targetLanguage = targetLanguageCode
+            )
+
+            withContext(Dispatchers.Main) {
+                when (result) {
+                    is TranslationResult.Success -> {
+                        uiState = TextActionUiState.Preview(
+                            title = "Tradução · $langName",
+                            originalText = extracted.textToCorrect,
+                            resultText = result.translatedText,
+                            extractedSentence = extracted
+                        )
+                    }
+                    is TranslationResult.Error -> {
+                        uiState = TextActionUiState.Error(result.errorMessage)
+                    }
+                }
+                onStateChanged()
+            }
+        }
+
+        uiState = TextActionUiState.Processing("Traduzindo para $langName…", job)
+        onStateChanged()
+    }
+
+    // -------------------------------------------------------------
+    // SHARED ACTIONS
+    // -------------------------------------------------------------
+    fun acceptConsentAndProceed(pendingAction: TextActionUiState.PendingAction) {
+        consentManager.setConsentAccepted(true)
+        when (pendingAction) {
+            is TextActionUiState.PendingAction.Correction -> executeCorrection()
+            is TextActionUiState.PendingAction.Translation -> selectLanguageAndTranslate(pendingAction.targetLanguageCode)
+        }
+    }
+
+    fun cancelAction() {
+        if (uiState is TextActionUiState.Processing) {
+            (uiState as TextActionUiState.Processing).cancelJob.cancel()
+        }
+        uiState = TextActionUiState.Idle
+        onStateChanged()
+    }
+
+    fun applyResult() {
+        val state = uiState as? TextActionUiState.Preview ?: return
         TextReplacementController.replace(
             inputConnection = inputConnection,
             extractedSentence = state.extractedSentence,
-            correctedText = corrected
+            correctedText = state.resultText
         )
-
-        correctionUiState = CorrectionUiState.Idle
+        uiState = TextActionUiState.Idle
         onStateChanged()
     }
 
     fun togglePreviewOriginal() {
-        val state = correctionUiState as? CorrectionUiState.Preview ?: return
+        val state = uiState as? TextActionUiState.Preview ?: return
         state.isShowingOriginal = !state.isShowingOriginal
         onStateChanged()
     }
 
     fun dismissError() {
-        correctionUiState = CorrectionUiState.Idle
+        uiState = TextActionUiState.Idle
         onStateChanged()
     }
 }

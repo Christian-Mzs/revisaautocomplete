@@ -22,6 +22,6 @@ dependencyResolutionManagement {
   }
 }
 
-rootProject.name = "Corretor"
+rootProject.name = "Revisa"
 
 include(":app")

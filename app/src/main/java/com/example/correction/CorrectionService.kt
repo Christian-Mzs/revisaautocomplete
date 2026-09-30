@@ -6,15 +6,12 @@ import com.example.translation.TranslationResult
 import com.example.translation.TranslationService
 
 class CorrectionService(
-    private val translationService: TranslationService
+    val translationService: TranslationService
 ) {
     constructor(provider: TranslationProvider = GoogleGtxTranslationProvider()) :
             this(TranslationService(provider))
 
-    suspend fun correct(
-        originalText: String,
-        includeDiagnostics: Boolean = false
-    ): CorrectionResult {
+    suspend fun correct(originalText: String): CorrectionResult {
         val trimmed = originalText.trim()
         if (trimmed.isEmpty()) {
             return CorrectionResult(
@@ -27,7 +24,7 @@ class CorrectionService(
 
         val totalStartTime = System.currentTimeMillis()
 
-        // Step 1: Portuguese (or auto-detected) -> English
+        // Step 1: Source (auto-detect) -> English
         val step1Result = translationService.translate(
             text = trimmed,
             sourceLanguage = "auto",
@@ -69,30 +66,13 @@ class CorrectionService(
                         )
                     }
                     is TranslationResult.Success -> {
-                        val correctedPortuguese = step2Result.translatedText
-
-                        val diagnostic = if (includeDiagnostics) {
-                            DiagnosticInfo(
-                                characterCount = originalText.length,
-                                detectedSourceLanguage = detectedLang,
-                                firstCallStatus = step1Result.httpStatusCode,
-                                firstCallLatencyMs = step1Result.latencyMs,
-                                intermediateEnglishText = englishText,
-                                secondCallStatus = step2Result.httpStatusCode,
-                                secondCallLatencyMs = step2Result.latencyMs,
-                                finalResult = correctedPortuguese,
-                                totalTimeMs = totalDuration
-                            )
-                        } else null
-
                         CorrectionResult(
                             originalText = originalText,
                             intermediateText = englishText,
-                            correctedText = correctedPortuguese,
+                            correctedText = step2Result.translatedText,
                             detectedSourceLanguage = detectedLang,
                             durationMs = totalDuration,
-                            isSuccess = true,
-                            diagnosticInfo = diagnostic
+                            isSuccess = true
                         )
                     }
                 }

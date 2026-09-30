@@ -16,18 +16,18 @@ class TranslationConsentManager(context: Context) {
         prefs.edit().putBoolean(KEY_CONSENT_ACCEPTED, accepted).apply()
     }
 
-    fun isDiagnosticModeEnabled(): Boolean {
-        return prefs.getBoolean(KEY_DIAGNOSTIC_MODE, false)
+    fun getLastTranslationLanguageCode(): String {
+        return prefs.getString(KEY_LAST_TRANSLATION_LANG, "en") ?: "en"
     }
 
-    fun setDiagnosticModeEnabled(enabled: Boolean) {
-        prefs.edit().putBoolean(KEY_DIAGNOSTIC_MODE, enabled).apply()
+    fun setLastTranslationLanguageCode(code: String) {
+        prefs.edit().putString(KEY_LAST_TRANSLATION_LANG, code).apply()
     }
 
     companion object {
-        private const val PREFS_NAME = "keyboard_privacy_settings"
-        private const val KEY_CONSENT_ACCEPTED = "consent_accepted_google_translate"
-        private const val KEY_DIAGNOSTIC_MODE = "diagnostic_mode_enabled"
+        private const val PREFS_NAME = "revisa_preferences"
+        private const val KEY_CONSENT_ACCEPTED = "consent_accepted_translation"
+        private const val KEY_LAST_TRANSLATION_LANG = "last_translation_language"
 
         @Volatile
         private var instance: TranslationConsentManager? = null
