@@ -44,7 +44,8 @@ class KeyboardController(
     private val coroutineScope: CoroutineScope,
     private val correctionService: CorrectionService = CorrectionService(),
     private val consentManager: TranslationConsentManager = TranslationConsentManager.getInstance(context),
-    private val onStateChanged: () -> Unit
+    private val onStateChanged: () -> Unit,
+    val onSwitchImeRequested: () -> Unit = {}
 ) {
 
     var currentMode: KeyboardMode = KeyboardMode.LETTERS
@@ -105,8 +106,6 @@ class KeyboardController(
 
     fun handleSpace() {
         inputConnection?.commitText(" ", 1)
-        // If after a period space is typed, we could optionally handle auto-caps,
-        // but keeping it simple and predictable is best.
     }
 
     fun handleEnter() {

@@ -160,8 +160,7 @@ class KeyboardLayoutView(
             layoutParams = LayoutParams(dpToPx(40), dpToPx(40))
             setOnClickListener {
                 it.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
-                val imm = context.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
-                imm?.showInputMethodPicker()
+                controller.onSwitchImeRequested()
             }
         }
         row.addView(switchImeBtn)

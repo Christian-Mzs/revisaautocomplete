@@ -1,12 +1,19 @@
 package com.example.translation
 
-import android.util.LruCache
+import java.util.Collections
 
 class TranslationService(
-    private val provider: TranslationProvider = GoogleGtxTranslationProvider()
+    private val provider: TranslationProvider = GoogleGtxTranslationProvider(),
+    private val maxCacheSize: Int = 60
 ) {
-    // In-memory cache: "source:target:text" -> TranslationResult.Success
-    private val translationCache = LruCache<String, TranslationResult.Success>(60)
+    // In-memory LRU cache decoupled from Android framework for pure JVM testability
+    private val translationCache = Collections.synchronizedMap(
+        object : LinkedHashMap<String, TranslationResult.Success>(maxCacheSize, 0.75f, true) {
+            override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, TranslationResult.Success>?): Boolean {
+                return size > maxCacheSize
+            }
+        }
+    )
 
     suspend fun translate(
         text: String,
@@ -24,7 +31,7 @@ class TranslationService(
         }
 
         val cacheKey = "$sourceLanguage:$targetLanguage:$trimmed"
-        val cached = translationCache.get(cacheKey)
+        val cached = translationCache[cacheKey]
         if (cached != null) {
             return cached
         }
@@ -36,13 +43,13 @@ class TranslationService(
         )
 
         if (result is TranslationResult.Success) {
-            translationCache.put(cacheKey, result)
+            translationCache[cacheKey] = result
         }
 
         return result
     }
 
     fun clearCache() {
-        translationCache.evictAll()
+        translationCache.clear()
     }
 }

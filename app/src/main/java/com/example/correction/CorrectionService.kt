@@ -1,11 +1,15 @@
 package com.example.correction
 
+import com.example.translation.GoogleGtxTranslationProvider
+import com.example.translation.TranslationProvider
 import com.example.translation.TranslationResult
 import com.example.translation.TranslationService
 
 class CorrectionService(
-    private val translationService: TranslationService = TranslationService()
+    private val translationService: TranslationService
 ) {
+    constructor(provider: TranslationProvider = GoogleGtxTranslationProvider()) :
+            this(TranslationService(provider))
 
     suspend fun correct(
         originalText: String,

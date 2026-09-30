@@ -11,15 +11,19 @@ data class ExtractedSentence(
 
 object SentenceExtractor {
 
-    private const val MAX_LOOKBACK = 300
-    private const val MAX_LOOKAHEAD = 150
-    private val TERMINATORS = charArrayOf('.', '!', '?', '\n')
+    const val DEFAULT_MAX_LOOKBACK = 300
+    const val DEFAULT_MAX_LOOKAHEAD = 150
+    val TERMINATORS = charArrayOf('.', '!', '?', '\n')
 
     /**
      * Safely extracts the current sentence around cursor or selected text
      * without reading unnecessary conversational context.
      */
-    fun extract(inputConnection: InputConnection?): ExtractedSentence? {
+    fun extract(
+        inputConnection: InputConnection?,
+        maxLookback: Int = DEFAULT_MAX_LOOKBACK,
+        maxLookahead: Int = DEFAULT_MAX_LOOKAHEAD
+    ): ExtractedSentence? {
         if (inputConnection == null) return null
 
         // 1. Priority: If user has explicitly selected text, correct only that selection
@@ -34,9 +38,9 @@ object SentenceExtractor {
             )
         }
 
-        // 2. No selection: Read up to MAX_LOOKBACK before cursor and MAX_LOOKAHEAD after cursor
-        val beforeCs = inputConnection.getTextBeforeCursor(MAX_LOOKBACK, 0)
-        val afterCs = inputConnection.getTextAfterCursor(MAX_LOOKAHEAD, 0)
+        // 2. No selection: Read up to maxLookback before cursor and maxLookahead after cursor
+        val beforeCs = inputConnection.getTextBeforeCursor(maxLookback, 0)
+        val afterCs = inputConnection.getTextAfterCursor(maxLookahead, 0)
 
         val before = beforeCs?.toString().orEmpty()
         val after = afterCs?.toString().orEmpty()
@@ -82,8 +86,6 @@ object SentenceExtractor {
         // Analyze 'after'
         val firstTerminatorAfter = after.indexOfFirst { TERMINATORS.contains(it) }
         val relevantAfter = if (firstTerminatorAfter >= 0) {
-            // If the terminator itself is a sentence ender like '.', should we include it?
-            // Usually we include up to the terminator
             after.substring(0, firstTerminatorAfter)
         } else {
             after

@@ -5,12 +5,9 @@ import android.view.inputmethod.EditorInfo
 
 object SensitiveFieldDetector {
 
-    private const val TYPE_TEXT_VARIATION_CREDIT_CARD = 0x000000a0
-
     /**
      * Determines whether the given editor input is marked as a password, PIN,
-     * credit card, or sensitive field where reading or transmitting text
-     * must be strictly prohibited.
+     * or sensitive field where reading or transmitting text must be strictly prohibited.
      */
     fun isSensitive(editorInfo: EditorInfo?): Boolean {
         if (editorInfo == null) return false
@@ -24,8 +21,7 @@ object SensitiveFieldDetector {
             when (variation) {
                 InputType.TYPE_TEXT_VARIATION_PASSWORD,
                 InputType.TYPE_TEXT_VARIATION_WEB_PASSWORD,
-                InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD,
-                TYPE_TEXT_VARIATION_CREDIT_CARD -> return true
+                InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD -> return true
             }
         }
 
