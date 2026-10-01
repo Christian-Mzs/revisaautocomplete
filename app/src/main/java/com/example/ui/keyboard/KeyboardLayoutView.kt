@@ -1023,12 +1023,11 @@ class KeyboardLayoutView(
             layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, dpToPx(G.KEY_HEIGHT_DP)).apply {
                 bottomMargin = dpToPx(G.KEY_VERTICAL_GAP_DP)
             }
-            val insetMargin = dpToPx(G.KEY_HORIZONTAL_GAP_DP) / 4
-            if (inset) addWeightedSpacer(this, G.SECOND_ROW_SIDE_INSET_WEIGHT, insetMargin)
+            if (inset) addWeightedSpacer(this, G.SECOND_ROW_SIDE_INSET_WEIGHT)
             for (char in chars) {
                 addView(createLetterKey(char, G.LETTER_KEY_WEIGHT))
             }
-            if (inset) addWeightedSpacer(this, G.SECOND_ROW_SIDE_INSET_WEIGHT, insetMargin)
+            if (inset) addWeightedSpacer(this, G.SECOND_ROW_SIDE_INSET_WEIGHT)
         }
     }
 
@@ -1462,7 +1461,7 @@ class KeyboardLayoutView(
     private fun dpToPx(dp: Int): Int {
         return TypedValue.applyDimension(
             TypedValue.COMPLEX_UNIT_DIP,
-            dp.toFloat() * G.SCALE,
+            dp.toFloat(),
             context.resources.displayMetrics
         ).roundToInt()
     }

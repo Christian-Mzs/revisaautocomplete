@@ -93,7 +93,7 @@ class KeyboardHitGeometryTest {
         assertNull(surface.hitTest(0f, Float.POSITIVE_INFINITY))
     }
 
-    @Test fun `vertical experiment leaves fonts and horizontal dimensions unchanged`() {
+    @Test fun `calibration keeps physical heights separate from existing font scale`() {
         assertEquals(45, KeyboardGeometry.KEY_HEIGHT_DP)
         assertEquals(37, KeyboardGeometry.NUMBER_KEY_HEIGHT_DP)
         assertEquals(31.5f, KeyboardGeometry.LETTER_FONT_SP, 0.001f)

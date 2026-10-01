@@ -1,8 +1,8 @@
 package com.example.ui.keyboard
 
-/** Ratios measured from tecladosamsung.png, converted using the Revisa reference density.
- * Letter/number height ~1.21; letter gap/height ~0.28; home-row inset ~half a cell.
- * Widths remain relative so the same geometry adapts to the available screen width.
+/** Physical dimensions calibrated against the Galaxy M52 reference captures.
+ * Ten equal horizontal slots align QWERTY; ASDF starts half a slot in;
+ * ZXCV starts one and a half slots in. SCALE applies to text only.
  */
 object KeyboardGeometry {
     const val SCALE = 1.05f
@@ -21,13 +21,13 @@ object KeyboardGeometry {
     const val BACKSPACE_FONT_SP = 28f * SCALE
     const val SPACE_LABEL_FONT_SP = 16f * SCALE
     const val LETTER_KEY_WEIGHT = 1f
-    const val SHIFT_KEY_WEIGHT = 1.4f
-    const val BACKSPACE_KEY_WEIGHT = 1.4f
-    const val THIRD_ROW_SPACER_WEIGHT = 0.2f
-    const val SYMBOL_KEY_WEIGHT = 1.57f
+    const val SHIFT_KEY_WEIGHT = 4f / 3f
+    const val BACKSPACE_KEY_WEIGHT = 4f / 3f
+    const val THIRD_ROW_SPACER_WEIGHT = 1f / 6f
+    const val SYMBOL_KEY_WEIGHT = 1.5f
     const val PUNCTUATION_KEY_WEIGHT = 1f
-    const val SPACE_KEY_WEIGHT = 5.7f
-    const val ACTION_KEY_WEIGHT = 1.57f
+    const val SPACE_KEY_WEIGHT = 5f
+    const val ACTION_KEY_WEIGHT = 1.5f
     // Half a letter cell on each side keeps the nine-letter row centered.
     const val SECOND_ROW_SIDE_INSET_WEIGHT = 0.5f
     const val TOOLBAR_HEIGHT_DP = 44
