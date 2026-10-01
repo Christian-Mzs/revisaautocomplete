@@ -72,6 +72,14 @@ class KeyboardInputMethodService : android.inputmethodservice.InputMethodService
         keyboardController.cancelAction()
     }
 
+    override fun onUpdateSelection(
+        oldSelStart: Int, oldSelEnd: Int, newSelStart: Int, newSelEnd: Int,
+        candidatesStart: Int, candidatesEnd: Int
+    ) {
+        super.onUpdateSelection(oldSelStart, oldSelEnd, newSelStart, newSelEnd, candidatesStart, candidatesEnd)
+        if (::keyboardController.isInitialized) keyboardController.onCursorChanged()
+    }
+
     override fun onEvaluateInputViewShown(): Boolean {
         super.onEvaluateInputViewShown()
         // CRITICAL FOR EMULATORS & EXTERNAL KEYBOARD DETECTIONS:

@@ -53,7 +53,22 @@ class KeyboardController(
         private set
 
     var uiState: TextActionUiState = TextActionUiState.Idle
+        private set(value) {
+            field = value
+            if (value is TextActionUiState.Idle) {
+                toolbarMode = ToolbarMode.SUGGESTIONS
+                refreshSuggestions()
+            } else {
+                currentWord = null
+                suggestions = emptyList()
+            }
+        }
+
+    var toolbarMode: ToolbarMode = ToolbarMode.SUGGESTIONS
         private set
+    var suggestions: List<String> = emptyList()
+        private set
+    private var currentWord: CurrentWord? = null
 
     private var inputConnection: InputConnection? = null
     var currentEditorInfo: EditorInfo? = null
@@ -67,6 +82,9 @@ class KeyboardController(
     fun updateInputConnection(ic: InputConnection?, editorInfo: EditorInfo?) {
         this.inputConnection = ic
         this.currentEditorInfo = editorInfo
+        toolbarMode = ToolbarMode.SUGGESTIONS
+        currentWord = null
+        suggestions = emptyList()
         if (uiState !is TextActionUiState.Processing) {
             uiState = TextActionUiState.Idle
         }
@@ -82,12 +100,13 @@ class KeyboardController(
 
         if (shiftState == ShiftState.ON) {
             shiftState = ShiftState.OFF
-            onStateChanged()
         }
+        onTypingChanged()
     }
 
     fun handleDirectCharacter(char: String) {
         inputConnection?.commitText(char, 1)
+        onTypingChanged()
     }
 
     fun handleBackspace() {
@@ -98,10 +117,12 @@ class KeyboardController(
         } else {
             ic.deleteSurroundingText(1, 0)
         }
+        onTypingChanged()
     }
 
     fun handleSpace() {
         inputConnection?.commitText(" ", 1)
+        onTypingChanged()
     }
 
     fun handleEnter() {
@@ -112,10 +133,45 @@ class KeyboardController(
             val action = editorInfo.imeOptions and EditorInfo.IME_MASK_ACTION
             if (action != EditorInfo.IME_ACTION_NONE && action != EditorInfo.IME_ACTION_UNSPECIFIED) {
                 ic.performEditorAction(action)
+                onTypingChanged()
                 return
             }
         }
         ic.commitText("\n", 1)
+        onTypingChanged()
+    }
+
+    fun toggleToolbarMode() {
+        if (uiState !is TextActionUiState.Idle) return
+        toolbarMode = if (toolbarMode == ToolbarMode.SUGGESTIONS) ToolbarMode.TOOLS else ToolbarMode.SUGGESTIONS
+        if (toolbarMode == ToolbarMode.SUGGESTIONS) refreshSuggestions()
+        onStateChanged()
+    }
+
+    private fun refreshSuggestions() {
+        currentWord = if (uiState is TextActionUiState.Idle) {
+            CurrentWordExtractor.extract(inputConnection, currentEditorInfo)
+        } else null
+        suggestions = currentWord?.let { LocalSuggestionEngine.suggest(it.text) }.orEmpty()
+    }
+
+    private fun onTypingChanged() {
+        toolbarMode = ToolbarMode.SUGGESTIONS
+        refreshSuggestions()
+        onStateChanged()
+    }
+
+    fun onCursorChanged() {
+        refreshSuggestions()
+        onStateChanged()
+    }
+
+    fun applySuggestion(candidate: String): Boolean {
+        if (uiState !is TextActionUiState.Idle || isSensitiveField || candidate !in suggestions) return false
+        val expected = currentWord ?: return false
+        val replaced = CurrentWordReplacement.replace(inputConnection, currentEditorInfo, expected, candidate)
+        onTypingChanged()
+        return replaced
     }
 
     fun getActionKeyType(): ActionKeyType {

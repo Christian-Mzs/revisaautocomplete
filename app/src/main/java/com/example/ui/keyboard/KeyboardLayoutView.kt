@@ -7,6 +7,7 @@ import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.RippleDrawable
+import android.text.TextUtils
 import android.os.Handler
 import android.os.Looper
 import android.util.TypedValue
@@ -28,7 +29,9 @@ import com.example.ime.ActionKeyType
 import com.example.ime.KeyboardController
 import com.example.ime.KeyboardMode
 import com.example.ime.ShiftState
+import com.example.ime.ToolbarMode
 import com.example.ime.TextActionUiState
+import com.example.ui.keyboard.KeyboardGeometry as G
 import com.example.translation.SupportedLanguages
 
 @SuppressLint("ViewConstructor")
@@ -52,6 +55,7 @@ class KeyboardLayoutView(
     )
 
     private var activePopup: PopupWindow? = null
+    private var renderedKeys: Triple<KeyboardMode, ShiftState, ActionKeyType>? = null
 
     // Clean, modern utility color palette (no flashy gradients or AI gimmicks)
     private val bgColor = Color.parseColor("#17191E")
@@ -67,8 +71,8 @@ class KeyboardLayoutView(
     init {
         orientation = VERTICAL
         setBackgroundColor(bgColor)
-        val pad = dpToPx(4)
-        setPadding(pad, pad, pad, dpToPx(6))
+        val pad = dpToPx(G.SIDE_PADDING_DP)
+        setPadding(pad, dpToPx(4), pad, dpToPx(G.BOTTOM_PADDING_DP))
 
         toolbarContainer = FrameLayout(context).apply {
             layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT).apply {
@@ -88,7 +92,12 @@ class KeyboardLayoutView(
 
     fun render() {
         renderToolbar()
-        renderKeys()
+        val keys = Triple(controller.currentMode, controller.shiftState, controller.getActionKeyType())
+        if (keys != renderedKeys) {
+            dismissPopup()
+            renderKeys()
+            renderedKeys = keys
+        }
     }
 
     // -------------------------------------------------------------
@@ -111,87 +120,94 @@ class KeyboardLayoutView(
         val row = LinearLayout(context).apply {
             orientation = HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, dpToPx(42))
+            layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, dpToPx(G.TOOLBAR_HEIGHT_DP))
         }
-
-        val isSens = controller.isSensitiveField
-
-        // 1. "Corrigir" Button (Explicit text)
-        val correctButton = TextView(context).apply {
-            text = context.getString(R.string.correct_action)
-            setTextColor(if (isSens) Color.parseColor("#64748B") else Color.WHITE)
-            textSize = 13.5f
-            typeface = Typeface.DEFAULT_BOLD
-            gravity = Gravity.CENTER
-            val bg = createRoundedDrawable(
-                if (isSens) Color.parseColor("#222631") else keyActionBgColor,
-                dpToPx(18).toFloat(),
-                if (isSens) Color.TRANSPARENT else pillBorderColor,
-                1
-            )
-            background = RippleDrawable(ColorStateList.valueOf(pressedColor), bg, null)
-            val padH = dpToPx(14)
-            setPadding(padH, 0, padH, 0)
-            layoutParams = LayoutParams(LayoutParams.WRAP_CONTENT, dpToPx(36)).apply {
-                marginEnd = dpToPx(8)
-            }
+        val tools = controller.toolbarMode == ToolbarMode.TOOLS
+        val arrow = toolbarText(if (tools) "‹" else "›").apply {
+            textSize = 26f
+            contentDescription = context.getString(if (tools) R.string.show_suggestions else R.string.show_tools)
+            layoutParams = LayoutParams(dpToPx(G.TOOLBAR_ARROW_WIDTH_DP), LayoutParams.MATCH_PARENT)
             setOnClickListener {
                 it.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
-                controller.requestCorrection()
+                controller.toggleToolbarMode()
             }
         }
-        row.addView(correctButton)
-
-        // 2. "Traduzir" Button (Explicit text, NOT an icon)
-        val translateButton = TextView(context).apply {
-            text = context.getString(R.string.translate_action)
-            setTextColor(if (isSens) Color.parseColor("#64748B") else Color.WHITE)
-            textSize = 13.5f
-            typeface = Typeface.DEFAULT_BOLD
-            gravity = Gravity.CENTER
-            val bg = createRoundedDrawable(
-                if (isSens) Color.parseColor("#222631") else keyActionBgColor,
-                dpToPx(18).toFloat(),
-                if (isSens) Color.TRANSPARENT else pillBorderColor,
-                1
-            )
-            background = RippleDrawable(ColorStateList.valueOf(pressedColor), bg, null)
-            val padH = dpToPx(14)
-            setPadding(padH, 0, padH, 0)
-            layoutParams = LayoutParams(LayoutParams.WRAP_CONTENT, dpToPx(36)).apply {
-                marginEnd = dpToPx(8)
+        row.addView(arrow)
+        addToolbarDivider(row)
+        if (tools) {
+            val enabled = !controller.isSensitiveField
+            val correct = toolbarText(context.getString(R.string.correct_action)).apply {
+                isEnabled = enabled
+                setTextColor(if (enabled) keyTextColor else keySubTextColor)
+                setOnClickListener {
+                    it.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                    controller.requestCorrection()
+                }
             }
-            setOnClickListener {
-                it.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
-                controller.requestTranslationPicker()
+            row.addView(correct)
+            addToolbarDivider(row)
+            val translate = toolbarText(context.getString(R.string.translate_action)).apply {
+                isEnabled = enabled
+                setTextColor(if (enabled) keyTextColor else keySubTextColor)
+                setOnClickListener {
+                    it.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                    controller.requestTranslationPicker()
+                }
+            }
+            row.addView(translate)
+            addToolbarDivider(row)
+            val switch = FrameLayout(context).apply {
+                layoutParams = LayoutParams(0, LayoutParams.MATCH_PARENT, 1f)
+                contentDescription = context.getString(R.string.switch_keyboard)
+                background = RippleDrawable(ColorStateList.valueOf(pressedColor),
+                    createRoundedDrawable(Color.TRANSPARENT, dpToPx(5).toFloat()), null)
+                addView(ImageView(context).apply {
+                    setImageDrawable(ContextCompat.getDrawable(context, R.drawable.ic_switch_keyboard))
+                    layoutParams = FrameLayout.LayoutParams(dpToPx(20), dpToPx(20), Gravity.CENTER)
+                })
+                setOnClickListener {
+                    it.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                    controller.onSwitchImeRequested()
+                }
+            }
+            row.addView(switch)
+        } else {
+            for (index in 0 until 3) {
+                val candidate = controller.suggestions.getOrNull(index)
+                row.addView(toolbarText(candidate.orEmpty()).apply {
+                    isEnabled = candidate != null
+                    typeface = if (index == 0) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
+                    setTextColor(if (index == 0) Color.parseColor("#BFDBFE") else keyTextColor)
+                    if (candidate != null) setOnClickListener {
+                        it.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                        controller.applySuggestion(candidate)
+                    }
+                })
+                if (index < 2) addToolbarDivider(row)
             }
         }
-        row.addView(translateButton)
-
-        // Flexible spacer
-        val spacer = View(context).apply {
-            layoutParams = LayoutParams(0, LayoutParams.MATCH_PARENT, 1f)
-        }
-        row.addView(spacer)
-
-        // 3. Switch Keyboard Icon Button (Clean keyboard silhouette, NOT a translation globe)
-        val switchImeBtn = FrameLayout(context).apply {
-            layoutParams = LayoutParams(dpToPx(38), dpToPx(36))
-            val bg = createRoundedDrawable(Color.TRANSPARENT, dpToPx(6).toFloat())
-            background = RippleDrawable(ColorStateList.valueOf(pressedColor), bg, null)
-            val iconView = ImageView(context).apply {
-                setImageDrawable(ContextCompat.getDrawable(context, R.drawable.ic_switch_keyboard))
-                layoutParams = FrameLayout.LayoutParams(dpToPx(20), dpToPx(20), Gravity.CENTER)
-            }
-            addView(iconView)
-            setOnClickListener {
-                it.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
-                controller.onSwitchImeRequested()
-            }
-        }
-        row.addView(switchImeBtn)
-
         toolbarContainer.addView(row)
+    }
+
+    private fun toolbarText(label: String): TextView = TextView(context).apply {
+        text = label
+        textSize = 13.5f
+        setTextColor(keyTextColor)
+        gravity = Gravity.CENTER
+        includeFontPadding = false
+        maxLines = 1
+        ellipsize = TextUtils.TruncateAt.END
+        setPadding(dpToPx(4), 0, dpToPx(4), 0)
+        layoutParams = LayoutParams(0, LayoutParams.MATCH_PARENT, 1f)
+        background = RippleDrawable(ColorStateList.valueOf(pressedColor),
+            createRoundedDrawable(Color.TRANSPARENT, dpToPx(5).toFloat()), null)
+    }
+
+    private fun addToolbarDivider(row: LinearLayout) {
+        row.addView(View(context).apply {
+            setBackgroundColor(pillBorderColor)
+            layoutParams = LayoutParams(dpToPx(1), dpToPx(20))
+        })
     }
 
     private fun renderLanguageSelectorToolbar() {
@@ -537,19 +553,23 @@ class KeyboardLayoutView(
     }
 
     private fun renderLetterKeys() {
+        keyboardKeysContainer.addView(createDirectRow(
+            listOf("1", "2", "3", "4", "5", "6", "7", "8", "9", "0"),
+            G.NUMBER_KEY_HEIGHT_DP, G.NUMBER_FONT_SP
+        ))
         // Row 1: q w e r t y u i o p
         val r1 = listOf("q", "w", "e", "r", "t", "y", "u", "i", "o", "p")
         keyboardKeysContainer.addView(createKeyRow(r1))
 
-        // Row 2: a s d f g h j k l ç
-        val r2 = listOf("a", "s", "d", "f", "g", "h", "j", "k", "l", "ç")
-        keyboardKeysContainer.addView(createKeyRow(r2))
+        // Row 2: nine letters with half-cell insets; ç remains available on long-press c.
+        val r2 = listOf("a", "s", "d", "f", "g", "h", "j", "k", "l")
+        keyboardKeysContainer.addView(createKeyRow(r2, inset = true))
 
         // Row 3: [Shift] z x c v b n m [Backspace]
         val r3 = LinearLayout(context).apply {
             orientation = HORIZONTAL
-            layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, dpToPx(48)).apply {
-                bottomMargin = dpToPx(4)
+            layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, dpToPx(G.KEY_HEIGHT_DP)).apply {
+                bottomMargin = dpToPx(G.KEY_VERTICAL_GAP_DP)
             }
         }
 
@@ -563,39 +583,41 @@ class KeyboardLayoutView(
             ShiftState.ON -> "⇧"
             ShiftState.CAPS_LOCK -> "⇪"
         }
-        val shiftKey = createSpecialKey(shiftLabel, 1.4f, shiftBgColor) {
+        val shiftKey = createSpecialKey(shiftLabel, G.SHIFT_KEY_WEIGHT, shiftBgColor) {
             controller.toggleShift()
         }
         r3.addView(shiftKey)
+        addWeightedSpacer(r3, G.THIRD_ROW_SPACER_WEIGHT)
 
         val r3Letters = listOf("z", "x", "c", "v", "b", "n", "m")
         for (char in r3Letters) {
-            r3.addView(createLetterKey(char, 1.0f))
+            r3.addView(createLetterKey(char, G.LETTER_KEY_WEIGHT))
         }
 
-        val backspaceKey = createRepeatKey("⌫", 1.4f, keyActionBgColor, onAction = {
+        val backspaceKey = createRepeatKey("⌫", G.BACKSPACE_KEY_WEIGHT, keyActionBgColor, onAction = {
             controller.handleBackspace()
         })
+        addWeightedSpacer(r3, G.THIRD_ROW_SPACER_WEIGHT)
         r3.addView(backspaceKey)
         keyboardKeysContainer.addView(r3)
 
         // Row 4: [?123] [ , ] [ Espaço ] [ . ] [ Action Key ]
         val r4 = LinearLayout(context).apply {
             orientation = HORIZONTAL
-            layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, dpToPx(48))
+            layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, dpToPx(G.KEY_HEIGHT_DP))
         }
 
-        val numModeKey = createSpecialKey("?123", 1.4f, keyActionBgColor) {
+        val numModeKey = createSpecialKey("?123", G.SYMBOL_KEY_WEIGHT, keyActionBgColor) {
             controller.setMode(KeyboardMode.NUMBERS)
         }
         r4.addView(numModeKey)
 
-        r4.addView(createDirectCharKey(",", 1.0f))
-        r4.addView(createSpaceKey("espaço", 4.2f))
-        r4.addView(createDirectCharKey(".", 1.0f))
+        r4.addView(createDirectCharKey(",", G.PUNCTUATION_KEY_WEIGHT))
+        r4.addView(createSpaceKey("espaço", G.SPACE_KEY_WEIGHT))
+        r4.addView(createDirectCharKey(".", G.PUNCTUATION_KEY_WEIGHT))
 
         // Vector-based Action Key (Enter / Search / Send / Done / Go)
-        val actionKey = createActionKey(1.4f, primaryActionColor) {
+        val actionKey = createActionKey(G.ACTION_KEY_WEIGHT, primaryActionColor) {
             controller.handleEnter()
         }
         r4.addView(actionKey)
@@ -615,22 +637,22 @@ class KeyboardLayoutView(
         // Row 3: [=\<] ! " ' : ; / ? [Backspace]
         val r3 = LinearLayout(context).apply {
             orientation = HORIZONTAL
-            layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, dpToPx(48)).apply {
-                bottomMargin = dpToPx(4)
+            layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, dpToPx(G.KEY_HEIGHT_DP)).apply {
+                bottomMargin = dpToPx(G.KEY_VERTICAL_GAP_DP)
             }
         }
 
-        val moreSymbolsKey = createSpecialKey("=\\<", 1.4f, keyActionBgColor) {
+        val moreSymbolsKey = createSpecialKey("=\\<", G.SYMBOL_KEY_WEIGHT, keyActionBgColor) {
             controller.setMode(KeyboardMode.SYMBOLS)
         }
         r3.addView(moreSymbolsKey)
 
         val r3Symbols = listOf("!", "\"", "'", ":", ";", "/", "?")
         for (sym in r3Symbols) {
-            r3.addView(createDirectCharKey(sym, 1.0f))
+            r3.addView(createDirectCharKey(sym, G.LETTER_KEY_WEIGHT))
         }
 
-        val backspaceKey = createRepeatKey("⌫", 1.4f, keyActionBgColor, onAction = {
+        val backspaceKey = createRepeatKey("⌫", G.BACKSPACE_KEY_WEIGHT, keyActionBgColor, onAction = {
             controller.handleBackspace()
         })
         r3.addView(backspaceKey)
@@ -639,19 +661,19 @@ class KeyboardLayoutView(
         // Row 4: [ABC] [ , ] [ Espaço ] [ . ] [ Action Key ]
         val r4 = LinearLayout(context).apply {
             orientation = HORIZONTAL
-            layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, dpToPx(48))
+            layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, dpToPx(G.KEY_HEIGHT_DP))
         }
 
-        val abcKey = createSpecialKey("ABC", 1.4f, keyActionBgColor) {
+        val abcKey = createSpecialKey("ABC", G.SYMBOL_KEY_WEIGHT, keyActionBgColor) {
             controller.setMode(KeyboardMode.LETTERS)
         }
         r4.addView(abcKey)
 
-        r4.addView(createDirectCharKey(",", 1.0f))
-        r4.addView(createSpaceKey("espaço", 4.2f))
-        r4.addView(createDirectCharKey(".", 1.0f))
+        r4.addView(createDirectCharKey(",", G.PUNCTUATION_KEY_WEIGHT))
+        r4.addView(createSpaceKey("espaço", G.SPACE_KEY_WEIGHT))
+        r4.addView(createDirectCharKey(".", G.PUNCTUATION_KEY_WEIGHT))
 
-        val actionKey = createActionKey(1.4f, primaryActionColor) {
+        val actionKey = createActionKey(G.ACTION_KEY_WEIGHT, primaryActionColor) {
             controller.handleEnter()
         }
         r4.addView(actionKey)
@@ -671,22 +693,22 @@ class KeyboardLayoutView(
         // Row 3: [?123] % _ < > [ ] « » [Backspace]
         val r3 = LinearLayout(context).apply {
             orientation = HORIZONTAL
-            layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, dpToPx(48)).apply {
-                bottomMargin = dpToPx(4)
+            layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, dpToPx(G.KEY_HEIGHT_DP)).apply {
+                bottomMargin = dpToPx(G.KEY_VERTICAL_GAP_DP)
             }
         }
 
-        val numKey = createSpecialKey("?123", 1.4f, keyActionBgColor) {
+        val numKey = createSpecialKey("?123", G.SYMBOL_KEY_WEIGHT, keyActionBgColor) {
             controller.setMode(KeyboardMode.NUMBERS)
         }
         r3.addView(numKey)
 
         val r3Symbols = listOf("%", "_", "<", ">", "[", "]", "«", "»")
         for (sym in r3Symbols) {
-            r3.addView(createDirectCharKey(sym, 1.0f))
+            r3.addView(createDirectCharKey(sym, G.LETTER_KEY_WEIGHT))
         }
 
-        val backspaceKey = createRepeatKey("⌫", 1.4f, keyActionBgColor, onAction = {
+        val backspaceKey = createRepeatKey("⌫", G.BACKSPACE_KEY_WEIGHT, keyActionBgColor, onAction = {
             controller.handleBackspace()
         })
         r3.addView(backspaceKey)
@@ -695,19 +717,19 @@ class KeyboardLayoutView(
         // Row 4: [ABC] [ , ] [ Espaço ] [ . ] [ Action Key ]
         val r4 = LinearLayout(context).apply {
             orientation = HORIZONTAL
-            layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, dpToPx(48))
+            layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, dpToPx(G.KEY_HEIGHT_DP))
         }
 
-        val abcKey = createSpecialKey("ABC", 1.4f, keyActionBgColor) {
+        val abcKey = createSpecialKey("ABC", G.SYMBOL_KEY_WEIGHT, keyActionBgColor) {
             controller.setMode(KeyboardMode.LETTERS)
         }
         r4.addView(abcKey)
 
-        r4.addView(createDirectCharKey(",", 1.0f))
-        r4.addView(createSpaceKey("espaço", 4.2f))
-        r4.addView(createDirectCharKey(".", 1.0f))
+        r4.addView(createDirectCharKey(",", G.PUNCTUATION_KEY_WEIGHT))
+        r4.addView(createSpaceKey("espaço", G.SPACE_KEY_WEIGHT))
+        r4.addView(createDirectCharKey(".", G.PUNCTUATION_KEY_WEIGHT))
 
-        val actionKey = createActionKey(1.4f, primaryActionColor) {
+        val actionKey = createActionKey(G.ACTION_KEY_WEIGHT, primaryActionColor) {
             controller.handleEnter()
         }
         r4.addView(actionKey)
@@ -718,26 +740,39 @@ class KeyboardLayoutView(
     // -------------------------------------------------------------
     // KEY BUILDERS
     // -------------------------------------------------------------
-    private fun createKeyRow(chars: List<String>): LinearLayout {
+    private fun addWeightedSpacer(row: LinearLayout, weight: Float, margin: Int = 0) {
+        row.addView(View(context).apply {
+            layoutParams = LayoutParams(0, LayoutParams.MATCH_PARENT, weight).apply {
+                setMargins(margin, 0, margin, 0)
+            }
+        })
+    }
+
+    private fun createKeyRow(chars: List<String>, inset: Boolean = false): LinearLayout {
         return LinearLayout(context).apply {
             orientation = HORIZONTAL
-            layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, dpToPx(48)).apply {
-                bottomMargin = dpToPx(4)
+            layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, dpToPx(G.KEY_HEIGHT_DP)).apply {
+                bottomMargin = dpToPx(G.KEY_VERTICAL_GAP_DP)
             }
+            val insetMargin = dpToPx(G.KEY_HORIZONTAL_GAP_DP) / 4
+            if (inset) addWeightedSpacer(this, G.SECOND_ROW_SIDE_INSET_WEIGHT, insetMargin)
             for (char in chars) {
-                addView(createLetterKey(char, 1.0f))
+                addView(createLetterKey(char, G.LETTER_KEY_WEIGHT))
             }
+            if (inset) addWeightedSpacer(this, G.SECOND_ROW_SIDE_INSET_WEIGHT, insetMargin)
         }
     }
 
-    private fun createDirectRow(chars: List<String>): LinearLayout {
+    private fun createDirectRow(
+        chars: List<String>, height: Int = G.KEY_HEIGHT_DP, fontSize: Float = G.SYMBOL_FONT_SP
+    ): LinearLayout {
         return LinearLayout(context).apply {
             orientation = HORIZONTAL
-            layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, dpToPx(48)).apply {
-                bottomMargin = dpToPx(4)
+            layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, dpToPx(height)).apply {
+                bottomMargin = dpToPx(G.KEY_VERTICAL_GAP_DP)
             }
             for (char in chars) {
-                addView(createDirectCharKey(char, 1.0f))
+                addView(createDirectCharKey(char, G.LETTER_KEY_WEIGHT, fontSize))
             }
         }
     }
@@ -745,10 +780,10 @@ class KeyboardLayoutView(
     private fun createLetterKey(char: String, weight: Float): View {
         val frame = FrameLayout(context).apply {
             layoutParams = LayoutParams(0, LayoutParams.MATCH_PARENT, weight).apply {
-                val m = dpToPx(2)
+                val m = dpToPx(G.KEY_HORIZONTAL_GAP_DP) / 2
                 setMargins(m, 0, m, 0)
             }
-            val bg = createRoundedDrawable(keyBgColor, dpToPx(6).toFloat())
+            val bg = createRoundedDrawable(keyBgColor, dpToPx(G.KEY_CORNER_RADIUS_DP).toFloat())
             background = RippleDrawable(ColorStateList.valueOf(pressedColor), bg, null)
         }
 
@@ -758,8 +793,10 @@ class KeyboardLayoutView(
         val tv = TextView(context).apply {
             text = displayChar
             setTextColor(keyTextColor)
-            textSize = 20f
+            textSize = G.LETTER_FONT_SP
             gravity = Gravity.CENTER
+            includeFontPadding = false
+            setPadding(0, 0, 0, 0)
             layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT)
         }
         frame.addView(tv)
@@ -796,21 +833,23 @@ class KeyboardLayoutView(
         return frame
     }
 
-    private fun createDirectCharKey(char: String, weight: Float): View {
+    private fun createDirectCharKey(char: String, weight: Float, fontSize: Float = G.SYMBOL_FONT_SP): View {
         val frame = FrameLayout(context).apply {
             layoutParams = LayoutParams(0, LayoutParams.MATCH_PARENT, weight).apply {
-                val m = dpToPx(2)
+                val m = dpToPx(G.KEY_HORIZONTAL_GAP_DP) / 2
                 setMargins(m, 0, m, 0)
             }
-            val bg = createRoundedDrawable(keyBgColor, dpToPx(6).toFloat())
+            val bg = createRoundedDrawable(keyBgColor, dpToPx(G.KEY_CORNER_RADIUS_DP).toFloat())
             background = RippleDrawable(ColorStateList.valueOf(pressedColor), bg, null)
         }
 
         val tv = TextView(context).apply {
             text = char
             setTextColor(keyTextColor)
-            textSize = 18f
+            textSize = fontSize
             gravity = Gravity.CENTER
+            includeFontPadding = false
+            setPadding(0, 0, 0, 0)
             layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT)
         }
         frame.addView(tv)
@@ -831,19 +870,21 @@ class KeyboardLayoutView(
     ): View {
         val frame = FrameLayout(context).apply {
             layoutParams = LayoutParams(0, LayoutParams.MATCH_PARENT, weight).apply {
-                val m = dpToPx(2)
+                val m = dpToPx(G.KEY_HORIZONTAL_GAP_DP) / 2
                 setMargins(m, 0, m, 0)
             }
-            val bg = createRoundedDrawable(backgroundColor, dpToPx(6).toFloat())
+            val bg = createRoundedDrawable(backgroundColor, dpToPx(G.KEY_CORNER_RADIUS_DP).toFloat())
             background = RippleDrawable(ColorStateList.valueOf(pressedColor), bg, null)
         }
 
         val tv = TextView(context).apply {
             text = label
             setTextColor(keyTextColor)
-            textSize = 16f
+            textSize = if (label == "⇧" || label == "⇪") G.SHIFT_FONT_SP else G.SPECIAL_FONT_SP
             typeface = Typeface.DEFAULT_BOLD
             gravity = Gravity.CENTER
+            includeFontPadding = false
+            setPadding(0, 0, 0, 0)
             layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT)
         }
         frame.addView(tv)
@@ -863,10 +904,10 @@ class KeyboardLayoutView(
     ): View {
         val frame = FrameLayout(context).apply {
             layoutParams = LayoutParams(0, LayoutParams.MATCH_PARENT, weight).apply {
-                val m = dpToPx(2)
+                val m = dpToPx(G.KEY_HORIZONTAL_GAP_DP) / 2
                 setMargins(m, 0, m, 0)
             }
-            val bg = createRoundedDrawable(backgroundColor, dpToPx(6).toFloat())
+            val bg = createRoundedDrawable(backgroundColor, dpToPx(G.KEY_CORNER_RADIUS_DP).toFloat())
             background = RippleDrawable(ColorStateList.valueOf(pressedColor), bg, null)
         }
 
@@ -897,18 +938,20 @@ class KeyboardLayoutView(
     private fun createSpaceKey(label: String, weight: Float): View {
         val frame = FrameLayout(context).apply {
             layoutParams = LayoutParams(0, LayoutParams.MATCH_PARENT, weight).apply {
-                val m = dpToPx(2)
+                val m = dpToPx(G.KEY_HORIZONTAL_GAP_DP) / 2
                 setMargins(m, 0, m, 0)
             }
-            val bg = createRoundedDrawable(keyBgColor, dpToPx(6).toFloat())
+            val bg = createRoundedDrawable(keyBgColor, dpToPx(G.KEY_CORNER_RADIUS_DP).toFloat())
             background = RippleDrawable(ColorStateList.valueOf(pressedColor), bg, null)
         }
 
         val tv = TextView(context).apply {
             text = label
             setTextColor(keySubTextColor)
-            textSize = 13f
+            textSize = G.SPACE_LABEL_FONT_SP
             gravity = Gravity.CENTER
+            includeFontPadding = false
+            setPadding(0, 0, 0, 0)
             layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT)
         }
         frame.addView(tv)
@@ -930,18 +973,20 @@ class KeyboardLayoutView(
     ): View {
         val frame = FrameLayout(context).apply {
             layoutParams = LayoutParams(0, LayoutParams.MATCH_PARENT, weight).apply {
-                val m = dpToPx(2)
+                val m = dpToPx(G.KEY_HORIZONTAL_GAP_DP) / 2
                 setMargins(m, 0, m, 0)
             }
-            val bg = createRoundedDrawable(backgroundColor, dpToPx(6).toFloat())
+            val bg = createRoundedDrawable(backgroundColor, dpToPx(G.KEY_CORNER_RADIUS_DP).toFloat())
             background = RippleDrawable(ColorStateList.valueOf(pressedColor), bg, null)
         }
 
         val tv = TextView(context).apply {
             text = label
             setTextColor(keyTextColor)
-            textSize = 18f
+            textSize = G.BACKSPACE_FONT_SP
             gravity = Gravity.CENTER
+            includeFontPadding = false
+            setPadding(0, 0, 0, 0)
             layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT)
         }
         frame.addView(tv)
@@ -1023,15 +1068,17 @@ class KeyboardLayoutView(
 
         popupView.measure(MeasureSpec.UNSPECIFIED, MeasureSpec.UNSPECIFIED)
         val popupHeight = popupView.measuredHeight
+        val popupWidth = popupView.measuredWidth
         val location = IntArray(2)
-        anchor.getLocationOnScreen(location)
-
-        popup.showAtLocation(
-            anchor,
-            Gravity.NO_GRAVITY,
-            location[0] - dpToPx(10),
-            location[1] - popupHeight - dpToPx(8)
-        )
+        anchor.getLocationInWindow(location)
+        val rootLocation = IntArray(2)
+        rootView.getLocationInWindow(rootLocation)
+        val x = (location[0] + anchor.width / 2 - popupWidth / 2)
+            .coerceIn(rootLocation[0], (rootLocation[0] + rootView.width - popupWidth).coerceAtLeast(rootLocation[0]))
+        val y = (location[1] - popupHeight - dpToPx(G.ACCENT_GAP_DP)).coerceAtLeast(rootLocation[1])
+        popup.inputMethodMode = PopupWindow.INPUT_METHOD_NOT_NEEDED
+        popup.isClippingEnabled = false
+        popup.showAtLocation(rootView, Gravity.TOP or Gravity.LEFT, x, y)
     }
 
     fun dismissPopup() {
