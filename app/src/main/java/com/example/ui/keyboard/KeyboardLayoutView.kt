@@ -56,6 +56,7 @@ class KeyboardLayoutView(
 
     private var activePopup: PopupWindow? = null
     private var renderedKeys: Triple<KeyboardMode, ShiftState, ActionKeyType>? = null
+    private var renderedToolbar: List<Any?>? = null
 
     // Clean, modern utility color palette (no flashy gradients or AI gimmicks)
     private val bgColor = Color.parseColor("#17191E")
@@ -104,6 +105,10 @@ class KeyboardLayoutView(
     // TOOLBAR RENDERING (Corrigir | Traduzir | Switch IME)
     // -------------------------------------------------------------
     private fun renderToolbar() {
+        val snapshot = listOf(controller.uiState, controller.toolbarMode,
+            controller.suggestions, controller.isSensitiveField)
+        if (snapshot == renderedToolbar) return
+        renderedToolbar = snapshot
         toolbarContainer.removeAllViews()
 
         when (val state = controller.uiState) {

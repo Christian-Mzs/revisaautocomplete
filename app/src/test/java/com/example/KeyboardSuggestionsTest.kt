@@ -31,7 +31,8 @@ class KeyboardSuggestionsTest {
 
     @Test fun `toolbar defaults toggles and typing restores suggestions without autocorrect or network`() {
         val provider = FakeTranslationProvider()
-        val controller = KeyboardController(context, TestScope(), TranslationService(provider = provider), onStateChanged = {})
+        val scope = TestScope()
+        val controller = KeyboardController(context, scope, TranslationService(provider = provider), onStateChanged = {})
         val ic = FakeInputConnection()
         controller.updateInputConnection(ic, editor())
         assertEquals(ToolbarMode.SUGGESTIONS, controller.toolbarMode)
@@ -41,6 +42,7 @@ class KeyboardSuggestionsTest {
         assertEquals(ToolbarMode.SUGGESTIONS, controller.toolbarMode)
         controller.toggleToolbarMode()
         for (letter in listOf("n", "a", "o")) controller.handleCharacter(letter)
+        scope.testScheduler.advanceUntilIdle()
         assertEquals(ToolbarMode.SUGGESTIONS, controller.toolbarMode)
         assertEquals("nao", ic.currentText)
         assertEquals("não", controller.suggestions.first())
@@ -48,6 +50,7 @@ class KeyboardSuggestionsTest {
         assertEquals("nao ", ic.currentText)
         assertTrue(controller.suggestions.isEmpty())
         controller.handleBackspace()
+        scope.testScheduler.advanceUntilIdle()
         assertEquals("não", controller.suggestions.first())
         assertTrue(controller.applySuggestion("não"))
         assertEquals("não", ic.currentText)
@@ -55,12 +58,14 @@ class KeyboardSuggestionsTest {
     }
 
     @Test fun `cursor updates replace candidates and idle restores default mode`() {
-        val controller = KeyboardController(context, TestScope(), onStateChanged = {})
+        val scope = TestScope()
+        val controller = KeyboardController(context, scope, onStateChanged = {})
         val ic = FakeInputConnection("nao voce")
         controller.updateInputConnection(ic, editor())
         assertEquals("você", controller.suggestions.first())
         ic.setSelectionRange(3, 3)
         controller.onCursorChanged()
+        scope.testScheduler.advanceUntilIdle()
         assertEquals("não", controller.suggestions.first())
         controller.toggleToolbarMode()
         controller.cancelAction()
@@ -68,6 +73,46 @@ class KeyboardSuggestionsTest {
         controller.toggleToolbarMode()
         controller.updateInputConnection(FakeInputConnection("voce"), editor())
         assertEquals(ToolbarMode.SUGGESTIONS, controller.toolbarMode)
+    }
+
+    @Test fun `rapid typing commits every character before coalesced editor reads`() {
+        val scope = TestScope()
+        var reads = 0
+        val ic = object : FakeInputConnection() {
+            override fun getSelectedText(flags: Int): CharSequence? {
+                reads++
+                return super.getSelectedText(flags)
+            }
+            override fun getTextBeforeCursor(n: Int, flags: Int): CharSequence? {
+                reads++
+                return super.getTextBeforeCursor(n, flags)
+            }
+            override fun getTextAfterCursor(n: Int, flags: Int): CharSequence? {
+                reads++
+                return super.getTextAfterCursor(n, flags)
+            }
+        }
+        val controller = KeyboardController(context, scope, onStateChanged = {},
+            suggestionDispatcher = kotlinx.coroutines.test.StandardTestDispatcher(scope.testScheduler))
+        controller.updateInputConnection(ic, editor())
+        reads = 0
+        val typed = "teste de digitacao"
+        for (char in typed) {
+            controller.handleDirectCharacter(char.toString())
+            controller.onCursorChanged()
+        }
+        assertEquals(typed, ic.currentText)
+        assertEquals(0, reads)
+        scope.testScheduler.advanceUntilIdle()
+        assertEquals(3, reads)
+    }
+
+    @Test fun `unchanged toolbar is retained during render callbacks`() {
+        val controller = KeyboardController(context, TestScope(), onStateChanged = {})
+        val view = KeyboardLayoutView(context, controller)
+        val toolbar = (view.getChildAt(0) as FrameLayout).getChildAt(0)
+        repeat(20) { view.render() }
+        assertSame(toolbar, (view.getChildAt(0) as FrameLayout).getChildAt(0))
     }
 
     @Test fun `password fields block suggestion reads during typing toggling and selection changes`() {

@@ -1,6 +1,7 @@
 package com.example.ime
 
 import java.io.DataInputStream
+import java.io.BufferedInputStream
 import java.io.InputStream
 import java.text.Normalizer
 import java.util.Locale
@@ -79,7 +80,9 @@ class OfflineDictionary private constructor(
             .filter { Character.getType(it) != Character.NON_SPACING_MARK.toInt() }
 
         fun read(input: InputStream): OfflineDictionary {
-            DataInputStream(GZIPInputStream(input)).use { stream ->
+            DataInputStream(BufferedInputStream(
+                GZIPInputStream(BufferedInputStream(input, 64 * 1024), 64 * 1024), 64 * 1024
+            )).use { stream ->
                 val magic = ByteArray(4)
                 stream.readFully(magic)
                 require(String(magic, Charsets.US_ASCII) == "RVD2") { "Invalid dictionary format" }

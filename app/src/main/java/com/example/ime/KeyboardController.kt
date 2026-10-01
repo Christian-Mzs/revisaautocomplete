@@ -14,6 +14,7 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 
 enum class KeyboardMode {
@@ -61,6 +62,7 @@ class KeyboardController(
                 toolbarMode = ToolbarMode.SUGGESTIONS
                 refreshSuggestions()
             } else {
+                suggestionRefreshJob?.cancel()
                 suggestionJob?.cancel()
                 suggestionRevision++
                 currentWord = null
@@ -74,10 +76,12 @@ class KeyboardController(
         private set
     private var currentWord: CurrentWord? = null
     private var suggestionJob: Job? = null
+    private var suggestionRefreshJob: Job? = null
     private var suggestionRevision: Long = 0
 
     fun loadDictionary() {
         coroutineScope.launch {
+            val started = android.os.SystemClock.elapsedRealtime()
             try {
                 withContext(Dispatchers.IO) {
                     LocalSuggestionEngine.loadDictionary { context.assets.open(OfflineDictionary.ASSET_PATH) }
@@ -89,6 +93,7 @@ class KeyboardController(
                 android.util.Log.e("RevisaDictionary", "Índice local inválido", error)
                 return@launch
             }
+            android.util.Log.i("RevisaDictionary", "Dicionário carregado em ${android.os.SystemClock.elapsedRealtime() - started} ms")
             refreshSuggestions()
             onStateChanged()
         }
@@ -173,6 +178,8 @@ class KeyboardController(
     }
 
     private fun refreshSuggestions() {
+        suggestionRefreshJob?.cancel()
+        suggestionRefreshJob = null
         suggestionJob?.cancel()
         val revision = ++suggestionRevision
         currentWord = if (uiState is TextActionUiState.Idle) {
@@ -192,13 +199,27 @@ class KeyboardController(
 
     private fun onTypingChanged() {
         toolbarMode = ToolbarMode.SUGGESTIONS
-        refreshSuggestions()
+        scheduleSuggestions()
         onStateChanged()
     }
 
     fun onCursorChanged() {
-        refreshSuggestions()
-        onStateChanged()
+        scheduleSuggestions()
+    }
+
+    private fun scheduleSuggestions() {
+        suggestionRefreshJob?.cancel()
+        suggestionJob?.cancel()
+        suggestionRevision++
+        currentWord = null
+        suggestions = emptyList()
+        suggestionRefreshJob = coroutineScope.launch {
+            // Coalesce typing and selection callbacks before synchronous editor reads.
+            delay(40)
+            suggestionRefreshJob = null
+            refreshSuggestions()
+            onStateChanged()
+        }
     }
 
     fun applySuggestion(candidate: String): Boolean {
