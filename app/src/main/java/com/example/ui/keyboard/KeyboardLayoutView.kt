@@ -76,6 +76,7 @@ class KeyboardLayoutView(
     private var renderedKeys: Triple<KeyboardMode, ShiftState, ActionKeyType>? = null
     private var renderedToolbar: List<Any?>? = null
     private var clipboardOpen = false
+    private var clipboardPanel: ClipboardHistoryView? = null
     private var emojiCategoryIndex = 0
     private val emojiPreferences by lazy { context.getSharedPreferences("emoji_recents", Context.MODE_PRIVATE) }
     private val recentEmojis: List<String>
@@ -131,20 +132,30 @@ class KeyboardLayoutView(
 
     fun resetNavigation() {
         clipboardOpen = false
+        clipboardPanel = null
         emojiCategoryIndex = 0
         renderedKeys = null
         render()
     }
 
     fun refreshClipboard() {
-        if (clipboardOpen) renderKeys()
+        if (clipboardOpen) clipboardPanel?.refresh()
     }
 
     fun render() {
         renderToolbar()
+        if (clipboardOpen && controller.isSensitiveField) {
+            clipboardOpen = false
+            clipboardPanel = null
+            renderKeys()
+        }
         val keys = Triple(controller.currentMode, controller.shiftState, controller.getActionKeyType())
         if (keys != renderedKeys) {
             val previous = renderedKeys
+            if (previous != null && previous.first != keys.first) {
+                clipboardOpen = false
+                clipboardPanel = null
+            }
             if (previous != null && previous.first == keys.first && previous.third == keys.third) {
                 updateLetterLabels(keyboardKeysContainer)
             } else {
@@ -176,7 +187,7 @@ class KeyboardLayoutView(
     // TOOLBAR RENDERING (Corrigir | Traduzir | Switch IME)
     // -------------------------------------------------------------
     private fun renderToolbar() {
-        val snapshot = listOf(controller.uiState, controller.isSensitiveField, controller.clipboardSuggestion.suggestion, controller.clipboardSuggestion.diagnosticSummary)
+        val snapshot = listOf(controller.uiState, controller.isSensitiveField, controller.clipboardSuggestion.suggestion)
         if (snapshot == renderedToolbar) return
         renderedToolbar = snapshot
         toolbarContainer.removeAllViews()
@@ -194,7 +205,6 @@ class KeyboardLayoutView(
     private fun renderIdleToolbar() {
         controller.clipboardSuggestion.suggestion?.let {
             renderClipboardSuggestion(it)
-            addClipboardDiagnosticOverlay()
             return
         }
         val row = LinearLayout(context).apply {
@@ -255,88 +265,57 @@ class KeyboardLayoutView(
             setOnClickListener {
                 dismissPopup()
                 clipboardOpen = !clipboardOpen
+                clipboardPanel = null
                 if (clipboardOpen) controller.clipboardHistory.capture()
                 renderKeys()
             }
         })
         row.addView(switch)
         toolbarContainer.addView(row)
-        addClipboardDiagnosticOverlay()
-    }
-
-    private fun addClipboardDiagnosticOverlay() {
-        if (!com.example.BuildConfig.DEBUG || controller.isSensitiveField) return
-        controller.clipboardSuggestion.diagnosticSummary?.let { renderClipboardDiagnostic(it) }
-    }
-
-    private fun renderClipboardDiagnostic(summary: String) {
-        // Keep the real toolbar as the first child. Tap the temporary overlay to reveal it.
-        val text = TextView(context).apply {
-            this.text = summary
-            tag = "clipboard_diagnostic_overlay"
-            contentDescription = "Diagnóstico do clipboard; toque para revelar ferramentas"
-            setBackgroundColor(keyBgColor)
-            textSize = 8f
-            setTextColor(keyTextColor)
-            maxLines = 4
-            ellipsize = TextUtils.TruncateAt.END
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(dpToPx(6), 0, dpToPx(6), 0)
-            layoutParams = FrameLayout.LayoutParams(LayoutParams.MATCH_PARENT, dpToPx(G.TOOLBAR_HEIGHT_DP))
-            setOnClickListener {
-                visibility = View.GONE
-                android.widget.Toast.makeText(context, summary, android.widget.Toast.LENGTH_LONG).show()
-            }
-        }
-        toolbarContainer.addView(text)
     }
 
     private fun renderClipboardSuggestion(item: com.example.clipboard.ClipboardSuggestion) {
         val row = LinearLayout(context).apply {
             orientation = HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
+            gravity = Gravity.CENTER
             layoutParams = FrameLayout.LayoutParams(LayoutParams.MATCH_PARENT, dpToPx(G.TOOLBAR_HEIGHT_DP))
         }
         val pill = LinearLayout(context).apply {
             orientation = HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(dpToPx(12), dpToPx(4), dpToPx(12), dpToPx(4))
-            layoutParams = LayoutParams(0, LayoutParams.MATCH_PARENT, 1f)
+            setPadding(dpToPx(10), dpToPx(4), dpToPx(10), dpToPx(4))
+            layoutParams = LayoutParams(LayoutParams.WRAP_CONTENT, dpToPx(36))
             background = createRoundedDrawable(keyBgColor, dpToPx(18).toFloat())
             contentDescription = "Colar conteúdo copiado"
             setOnClickListener { controller.pasteClipboardSuggestion() }
-            if (com.example.BuildConfig.DEBUG) setOnLongClickListener {
-                android.widget.Toast.makeText(context, controller.clipboardSuggestion.diagnosticSummary
-                    ?: "IMG: diagnóstico indisponível", android.widget.Toast.LENGTH_LONG).show()
-                true
-            }
         }
         pill.addView(ImageView(context).apply {
-            layoutParams = LayoutParams(dpToPx(32), dpToPx(32))
-            scaleType = ImageView.ScaleType.FIT_CENTER
-            if (item is com.example.clipboard.ClipboardSuggestion.Image && item.thumbnail != null) {
-                setImageBitmap(item.thumbnail)
-            } else {
-                setImageResource(if (item is com.example.clipboard.ClipboardSuggestion.Image)
-                    android.R.drawable.ic_menu_gallery else R.drawable.ic_clipboard)
-                setColorFilter(keyTextColor)
-            }
+            layoutParams = LayoutParams(dpToPx(18), dpToPx(18))
+            setImageResource(R.drawable.ic_clipboard)
+            setColorFilter(keySubTextColor)
         })
-        pill.addView(TextView(context).apply {
-            text = if (item is com.example.clipboard.ClipboardSuggestion.Text) item.text else "Colar imagem"
+        val label = TextView(context).apply {
+            text = item.text
             setTextColor(keyTextColor)
             textSize = G.TOOL_FONT_SP
             maxLines = 1
             ellipsize = TextUtils.TruncateAt.END
             setPadding(dpToPx(8), 0, 0, 0)
-            layoutParams = LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f)
-        })
+            layoutParams = LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT)
+            // Starts bounded before layout; later updates follow the actual toolbar width.
+            maxWidth = maxOf(0, (resources.displayMetrics.widthPixels * 0.65f).toInt() - dpToPx(78))
+        }
+        pill.addView(label)
         row.addView(pill)
         row.addView(toolbarText("×", 26f).apply {
-            layoutParams = LayoutParams(dpToPx(48), LayoutParams.MATCH_PARENT)
+            layoutParams = LayoutParams(dpToPx(40), LayoutParams.MATCH_PARENT)
             contentDescription = "Dispensar sugestão de clipboard"
             setOnClickListener { controller.clipboardSuggestion.dismiss() }
         })
+        row.addOnLayoutChangeListener { _, l, _, r, _, _, _, _, _ ->
+            val limit = maxOf(0, ((r - l) * 0.65f).toInt() - dpToPx(78))
+            if (label.maxWidth != limit) label.maxWidth = limit
+        }
         toolbarContainer.addView(row)
     }
 
@@ -939,72 +918,18 @@ class KeyboardLayoutView(
     // KEY BUILDERS
     // -------------------------------------------------------------
     private fun renderClipboard() {
-        val header = LinearLayout(context).apply {
-            orientation = HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, dpToPx(G.NUMBER_KEY_HEIGHT_DP))
-        }
-        header.addView(TextView(context).apply {
-            text = "Área de transferência"
-            textSize = 16f
-            setTextColor(keyTextColor)
-            layoutParams = LayoutParams(0, LayoutParams.MATCH_PARENT, 1f)
-            gravity = Gravity.CENTER_VERTICAL
-        })
-        header.addView(TextView(context).apply {
-            text = "ABC"
-            contentDescription = "Voltar ao teclado"
-            setTextColor(keyTextColor)
-            gravity = Gravity.CENTER
-            layoutParams = LayoutParams(dpToPx(48), LayoutParams.MATCH_PARENT)
-            setOnClickListener {
+        val panel = clipboardPanel ?: ClipboardHistoryView(context, controller.clipboardHistory,
+            sensitive = { controller.isSensitiveField },
+            paste = { text -> if (!controller.isSensitiveField) controller.handleDirectCharacter(text) },
+            back = {
                 clipboardOpen = false
+                clipboardPanel = null
                 controller.setMode(KeyboardMode.LETTERS)
                 renderKeys()
-            }
-        })
-        keyboardKeysContainer.addView(header)
-        val list = LinearLayout(context).apply { orientation = VERTICAL }
-        val scroll = android.widget.ScrollView(context).apply {
-            layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, 0, 1f)
-            addView(list)
-        }
-        keyboardKeysContainer.addView(scroll)
-        val entries = if (controller.isSensitiveField) emptyList() else controller.clipboardHistory.entries()
-        if (entries.isEmpty()) list.addView(TextView(context).apply {
-            text = "Os textos que você copiar aparecerão aqui (até 30 itens)."
-            setTextColor(keySubTextColor)
-            setPadding(dpToPx(12), dpToPx(16), dpToPx(12), dpToPx(16))
-        })
-        entries.forEach { item ->
-            val row = LinearLayout(context).apply {
-                orientation = HORIZONTAL
-                gravity = Gravity.CENTER_VERTICAL
-                setPadding(0, dpToPx(3), 0, dpToPx(3))
-            }
-            row.addView(TextView(context).apply {
-                text = item
-                textSize = 16f
-                setTextColor(keyTextColor)
-                maxLines = 4
-                ellipsize = TextUtils.TruncateAt.END
-                minHeight = dpToPx(48)
-                setPadding(dpToPx(12), dpToPx(8), dpToPx(12), dpToPx(8))
-                background = createRoundedDrawable(keyBgColor, dpToPx(6).toFloat())
-                layoutParams = LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f)
-                setOnClickListener { if (!controller.isSensitiveField) controller.handleDirectCharacter(item) }
-            })
-            row.addView(TextView(context).apply {
-                text = "×"
-                textSize = 24f
-                gravity = Gravity.CENTER
-                setTextColor(keySubTextColor)
-                contentDescription = "Excluir item"
-                layoutParams = LayoutParams(dpToPx(44), dpToPx(48))
-                setOnClickListener { controller.clipboardHistory.remove(item); renderKeys() }
-            })
-            list.addView(row)
-        }
+            }).also { clipboardPanel = it }
+        panel.layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT)
+        panel.refresh()
+        keyboardKeysContainer.addView(panel)
     }
 
     private fun renderEmojiKeys() {

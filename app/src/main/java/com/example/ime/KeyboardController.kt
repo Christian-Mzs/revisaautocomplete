@@ -47,7 +47,7 @@ class KeyboardController(
     val onSwitchImeRequested: () -> Unit = {}
 ) {
     val clipboardHistory = com.example.clipboard.ClipboardHistory(context)
-    val clipboardSuggestion = com.example.clipboard.ClipboardSuggestionController(context, coroutineScope, onStateChanged)
+    val clipboardSuggestion = com.example.clipboard.ClipboardSuggestionController(context, onStateChanged)
     val languagePreferences = LanguagePreferences(context)
 
     var currentMode: KeyboardMode = KeyboardMode.LETTERS
@@ -74,7 +74,7 @@ class KeyboardController(
         if (uiState !is TextActionUiState.Processing) {
             uiState = TextActionUiState.Idle
         }
-        clipboardSuggestion.updateEditor(ic, editorInfo, isSensitiveField)
+        clipboardSuggestion.updateEditor(ic, isSensitiveField)
         onStateChanged()
     }
 

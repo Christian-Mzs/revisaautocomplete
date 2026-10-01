@@ -42,39 +42,15 @@ class KeyboardNavigationTest {
         assertFalse(labels.contains("?123"))
         controller.clipboardHistory.add("texto copiado")
         descendants(view).first { it.contentDescription == "Área de transferência" }.performClick()
+        view.measure(View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED))
+        view.layout(0, 0, 1080, view.measuredHeight)
         descendants(view).filterIsInstance<TextView>().first { it.text.toString() == "texto copiado" }.performClick()
         assertEquals("texto copiado", ic.currentText)
         controller.setMode(KeyboardMode.LETTERS)
         view.resetNavigation()
         assertFalse(descendants(view).filterIsInstance<TextView>().any { it.text.toString() == "texto copiado" })
         assertEquals(KeyboardMode.LETTERS, controller.currentMode)
-    }
-
-    @Test fun diagnosticOverlayPreservesToolbarToolsAndCanBeDismissed() {
-        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-        clipboard.clearPrimaryClip()
-        lateinit var view: KeyboardLayoutView
-        val controller = KeyboardController(context, TestScope(), onStateChanged = { view.render() })
-        view = KeyboardLayoutView(context, controller)
-        controller.updateInputConnection(FakeInputConnection(), EditorInfo().apply {
-            inputType = InputType.TYPE_CLASS_TEXT
-        })
-        val container = view.getChildAt(0) as android.widget.FrameLayout
-        val toolbar = container.getChildAt(0)
-        assertTrue(toolbar is android.widget.LinearLayout)
-        for (label in listOf(context.getString(R.string.open_emojis),
-            context.getString(R.string.correct_action), context.getString(R.string.translate_action),
-            "Área de transferência")) {
-            assertTrue(descendants(view).any { it.contentDescription == label })
-        }
-        val overlay = descendants(view).first { it.tag == "clipboard_diagnostic_overlay" }
-        assertTrue((overlay as TextView).text.toString().contains("NO_PRIMARY_CLIP"))
-        overlay.performClick()
-        assertEquals(View.GONE, overlay.visibility)
-        assertSame(toolbar, container.getChildAt(0))
-        descendants(view).first { it.contentDescription == context.getString(R.string.open_emojis) }.performClick()
-        assertEquals(KeyboardMode.EMOJIS, controller.currentMode)
-        view.dismissPopup()
     }
 
     @Test fun horizontalSwipesChangeCategoryAndVerticalScrollDoesNot() {

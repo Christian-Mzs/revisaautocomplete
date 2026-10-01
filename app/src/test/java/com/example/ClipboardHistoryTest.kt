@@ -47,4 +47,39 @@ class ClipboardHistoryTest {
         history.capture()
         assertEquals(1, history.entries().size)
     }
+    @Test fun legacyStringsMigrateWithoutLosingWhitespaceOrOrder() {
+        context.getSharedPreferences("clipboard_history", Context.MODE_PRIVATE).edit()
+            .putString("items", "[\"  old\",\"second\"]").commit()
+        val history = ClipboardHistory(context)
+        assertEquals(listOf("  old", "second"), history.entries())
+        assertTrue(history.records().none { it.pinned })
+        history.setPinned(listOf("second"), true)
+        val restored = ClipboardHistory(context)
+        assertEquals(listOf("second", "  old"), restored.entries())
+        assertTrue(restored.records().first().pinned)
+    }
+    @Test fun pinnedItemsAreStablePersistentAndOutsideTheNormalLimit() {
+        val history = ClipboardHistory(context)
+        history.add("one"); history.add("two")
+        history.setPinned(listOf("one", "two"), true)
+        repeat(40) { history.add("normal $it") }
+        assertEquals(32, history.records().size)
+        assertEquals(listOf("two", "one"), history.records().take(2).map { it.text })
+        assertEquals(30, history.records().count { !it.pinned })
+        history.add("one")
+        assertEquals(listOf("two", "one"), history.entries().take(2))
+        assertEquals(history.records(), ClipboardHistory(context).records())
+        history.setPinned(listOf("two"), false)
+        assertEquals("one", history.entries().first())
+        assertEquals(30, history.records().count { !it.pinned })
+        assertFalse(history.records().first { it.text == "two" }.pinned)
+        history.removeAll(listOf("one", "two", "normal 39"))
+        assertFalse(history.entries().any { it == "one" || it == "two" || it == "normal 39" })
+    }
+    @Test fun regularRecopyMovesToFrontWithoutDuplicating() {
+        val history = ClipboardHistory(context)
+        history.add("a"); history.add("b"); history.add("a")
+        assertEquals(listOf("a", "b"), history.entries())
+    }
+
 }
