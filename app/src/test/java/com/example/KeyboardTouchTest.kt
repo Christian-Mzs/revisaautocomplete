@@ -212,6 +212,19 @@ class KeyboardTouchTest {
         view.dismissPopup()
     }
 
+    @Test fun `visual letter gaps belong to the touch target`() {
+        val ic = FakeInputConnection()
+        val (_, view) = keyboard(ic)
+        val key = keys(view).first { it.tag == "t" }
+        val params = key.layoutParams as LinearLayout.LayoutParams
+        assertEquals(0, params.leftMargin)
+        assertEquals(0, params.rightMargin)
+        touch(key, MotionEvent.ACTION_DOWN, 0.5f)
+        touch(key, MotionEvent.ACTION_UP, 0.5f)
+        assertEquals("t", ic.currentText)
+        view.dismissPopup()
+    }
+
     @Test fun `sustained typing preserves spaces and characters without waiting for posted clicks`() {
         val ic = object : FakeInputConnection() {
             override fun getTextBeforeCursor(n: Int, flags: Int): CharSequence = error("Typing queried text")

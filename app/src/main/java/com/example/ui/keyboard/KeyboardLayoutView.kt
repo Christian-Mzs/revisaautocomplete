@@ -137,8 +137,8 @@ class KeyboardLayoutView(
                 (child.getChildAt(0) as TextView).text =
                     if (controller.shiftState == ShiftState.CAPS_LOCK) "⇪" else "⇧"
                 val color = if (controller.shiftState == ShiftState.OFF) keyActionBgColor else primaryActionColor
-                child.background = RippleDrawable(ColorStateList.valueOf(pressedColor),
-                    createRoundedDrawable(color, dpToPx(G.KEY_CORNER_RADIUS_DP).toFloat()), null)
+                child.background = keyBackground(
+                    createRoundedDrawable(color, dpToPx(G.KEY_CORNER_RADIUS_DP).toFloat()))
             } else if (letter != null && child is FrameLayout) {
                 (child.getChildAt(0) as TextView).text =
                     if (controller.shiftState != ShiftState.OFF) letter.uppercase() else letter.lowercase()
@@ -920,10 +920,8 @@ class KeyboardLayoutView(
 
     private fun createLetterKey(char: String, weight: Float): View {
         val frame = FrameLayout(context).apply {
-            layoutParams = LayoutParams(0, LayoutParams.MATCH_PARENT, weight).apply {
-                val m = dpToPx(G.KEY_HORIZONTAL_GAP_DP) / 2
-                setMargins(m, 0, m, 0)
-            }
+            // The visual gap belongs to the drawable, so touches in the gap reach a key.
+            layoutParams = LayoutParams(0, LayoutParams.MATCH_PARENT, weight)
             val bg = createRoundedDrawable(keyBgColor, dpToPx(G.KEY_CORNER_RADIUS_DP).toFloat())
             background = keyBackground(bg)
         }
@@ -974,10 +972,8 @@ class KeyboardLayoutView(
 
     private fun createDirectCharKey(char: String, weight: Float, fontSize: Float = G.SYMBOL_FONT_SP): View {
         val frame = FrameLayout(context).apply {
-            layoutParams = LayoutParams(0, LayoutParams.MATCH_PARENT, weight).apply {
-                val m = dpToPx(G.KEY_HORIZONTAL_GAP_DP) / 2
-                setMargins(m, 0, m, 0)
-            }
+            // The visual gap belongs to the drawable, so touches in the gap reach a key.
+            layoutParams = LayoutParams(0, LayoutParams.MATCH_PARENT, weight)
             val bg = createRoundedDrawable(keyBgColor, dpToPx(G.KEY_CORNER_RADIUS_DP).toFloat())
             background = keyBackground(bg)
         }
@@ -1010,10 +1006,8 @@ class KeyboardLayoutView(
         onClick: () -> Unit
     ): View {
         val frame = FrameLayout(context).apply {
-            layoutParams = LayoutParams(0, LayoutParams.MATCH_PARENT, weight).apply {
-                val m = dpToPx(G.KEY_HORIZONTAL_GAP_DP) / 2
-                setMargins(m, 0, m, 0)
-            }
+            // The visual gap belongs to the drawable, so touches in the gap reach a key.
+            layoutParams = LayoutParams(0, LayoutParams.MATCH_PARENT, weight)
             val bg = createRoundedDrawable(backgroundColor, dpToPx(G.KEY_CORNER_RADIUS_DP).toFloat())
             background = keyBackground(bg)
         }
@@ -1046,10 +1040,8 @@ class KeyboardLayoutView(
         onClick: () -> Unit
     ): View {
         val frame = FrameLayout(context).apply {
-            layoutParams = LayoutParams(0, LayoutParams.MATCH_PARENT, weight).apply {
-                val m = dpToPx(G.KEY_HORIZONTAL_GAP_DP) / 2
-                setMargins(m, 0, m, 0)
-            }
+            // The visual gap belongs to the drawable, so touches in the gap reach a key.
+            layoutParams = LayoutParams(0, LayoutParams.MATCH_PARENT, weight)
             val bg = createRoundedDrawable(backgroundColor, dpToPx(G.KEY_CORNER_RADIUS_DP).toFloat())
             background = keyBackground(bg)
         }
@@ -1081,10 +1073,8 @@ class KeyboardLayoutView(
 
     private fun createSpaceKey(label: String, weight: Float): View {
         val frame = FrameLayout(context).apply {
-            layoutParams = LayoutParams(0, LayoutParams.MATCH_PARENT, weight).apply {
-                val m = dpToPx(G.KEY_HORIZONTAL_GAP_DP) / 2
-                setMargins(m, 0, m, 0)
-            }
+            // The visual gap belongs to the drawable, so touches in the gap reach a key.
+            layoutParams = LayoutParams(0, LayoutParams.MATCH_PARENT, weight)
             val bg = createRoundedDrawable(keyBgColor, dpToPx(G.KEY_CORNER_RADIUS_DP).toFloat())
             background = keyBackground(bg)
         }
@@ -1117,10 +1107,8 @@ class KeyboardLayoutView(
         onAction: () -> Unit
     ): View {
         val frame = FrameLayout(context).apply {
-            layoutParams = LayoutParams(0, LayoutParams.MATCH_PARENT, weight).apply {
-                val m = dpToPx(G.KEY_HORIZONTAL_GAP_DP) / 2
-                setMargins(m, 0, m, 0)
-            }
+            // The visual gap belongs to the drawable, so touches in the gap reach a key.
+            layoutParams = LayoutParams(0, LayoutParams.MATCH_PARENT, weight)
             val bg = createRoundedDrawable(backgroundColor, dpToPx(G.KEY_CORNER_RADIUS_DP).toFloat())
             background = keyBackground(bg)
         }
@@ -1316,10 +1304,14 @@ class KeyboardLayoutView(
     private fun keyboardKeysHeight(): Int = dpToPx(G.NUMBER_KEY_HEIGHT_DP) +
         4 * dpToPx(G.KEY_HEIGHT_DP) + 4 * dpToPx(G.KEY_VERTICAL_GAP_DP)
 
-    private fun keyBackground(normal: GradientDrawable): StateListDrawable = StateListDrawable().apply {
-        addState(intArrayOf(android.R.attr.state_pressed),
-            createRoundedDrawable(pressedColor, dpToPx(G.KEY_CORNER_RADIUS_DP).toFloat()))
-        addState(intArrayOf(), normal)
+    private fun keyBackground(normal: GradientDrawable): android.graphics.drawable.Drawable {
+        val states = StateListDrawable().apply {
+            addState(intArrayOf(android.R.attr.state_pressed),
+                createRoundedDrawable(pressedColor, dpToPx(G.KEY_CORNER_RADIUS_DP).toFloat()))
+            addState(intArrayOf(), normal)
+        }
+        val gap = dpToPx(G.KEY_HORIZONTAL_GAP_DP) / 2
+        return android.graphics.drawable.InsetDrawable(states, gap, 0, gap, 0)
     }
 
     @SuppressLint("ClickableViewAccessibility")
