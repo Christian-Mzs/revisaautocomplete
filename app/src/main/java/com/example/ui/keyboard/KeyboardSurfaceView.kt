@@ -8,8 +8,8 @@ import android.widget.LinearLayout
 
 /** Keeps the existing drawing/layout, but owns the complete functional key surface. */
 internal class KeyboardSurfaceView(context: Context) : LinearLayout(context) {
-    data class Target(val view: View, val visualBounds: RectF, val touchBounds: RectF = RectF())
-    private val rows = ArrayList<List<Target>>()
+    data class Target(val view: View, val visualBounds: RectF)
+    private val targets = ArrayList<Target>()
     var visualHorizontalInsetPx = 0
     var centralized = true
     var onPointerEvent: ((MotionEvent, View?) -> Unit)? = null
@@ -18,50 +18,44 @@ internal class KeyboardSurfaceView(context: Context) : LinearLayout(context) {
 
     override fun onLayout(changed: Boolean, l: Int, t: Int, r: Int, b: Int) {
         super.onLayout(changed, l, t, r, b)
-        rows.clear()
+        targets.clear()
         for (i in 0 until childCount) {
             val row = getChildAt(i) as? LinearLayout ?: continue
-            val targets = ArrayList<Target>()
+            val rowTargets = ArrayList<Target>()
             for (j in 0 until row.childCount) {
                 val key = row.getChildAt(j)
-                if (isKey(key)) targets.add(Target(key, RectF(
+                if (isKey(key)) rowTargets.add(Target(key, RectF(
                     (row.left + key.left + visualHorizontalInsetPx).toFloat(), (row.top + key.top).toFloat(),
                     (row.left + key.right - visualHorizontalInsetPx).toFloat(), (row.top + key.bottom).toFloat())))
             }
-            if (targets.isNotEmpty()) rows.add(targets)
+            targets.addAll(rowTargets)
         }
-        for (i in rows.indices) {
-            val row = rows[i]
-            val centerY = row[0].visualBounds.centerY()
-            val top = if (i == 0) 0f else (rows[i - 1][0].visualBounds.centerY() + centerY) / 2f
-            val bottom = if (i == rows.lastIndex) height.toFloat() else
-                (centerY + rows[i + 1][0].visualBounds.centerY()) / 2f
-            for (j in row.indices) {
-                val centerX = row[j].visualBounds.centerX()
-                val left = if (j == 0) 0f else (row[j - 1].visualBounds.centerX() + centerX) / 2f
-                val right = if (j == row.lastIndex) width.toFloat() else
-                    (centerX + row[j + 1].visualBounds.centerX()) / 2f
-                row[j].touchBounds.set(left, top, right, bottom)
-            }
-        }
+        // Explicit geometric tie order: upper rectangle, then left rectangle,
+        // then bottom/right edges. Distinct keys in this layout never share a rectangle.
+        targets.sortWith(compareBy<Target>({ it.visualBounds.top }, { it.visualBounds.left },
+            { it.visualBounds.bottom }, { it.visualBounds.right }))
     }
 
-    /** Row and column midpoint partitions cover [0,width) × [0,height) without holes.
-     * Ties belong to the next row/key. External keyboard padding is excluded. */
+    /** Visual containment wins. Only gaps use squared distance to the rectangle in 2D.
+     * Exact distance ties use the geometric order above, independently of child order.
+     * Every finite point in [0,width) × [0,height) resolves when keys are laid out.
+     * External keyboard padding is excluded. RectF uses half-open containment. */
     fun hitTest(x: Float, y: Float): View? {
-        if (!x.isFinite() || !y.isFinite() || x < 0 || y < 0 || x >= width || y >= height || rows.isEmpty()) return null
-        var rowIndex = 0
-        while (rowIndex < rows.lastIndex) {
-            if (y < rows[rowIndex][0].touchBounds.bottom) break
-            rowIndex++
+        if (!x.isFinite() || !y.isFinite() || x < 0 || y < 0 || x >= width || y >= height) return null
+        targets.firstOrNull { it.visualBounds.contains(x, y) }?.let { return it.view }
+        var nearest: Target? = null
+        var minimum = Float.POSITIVE_INFINITY
+        for (target in targets) {
+            val bounds = target.visualBounds
+            val dx = maxOf(bounds.left - x, 0f, x - bounds.right)
+            val dy = maxOf(bounds.top - y, 0f, y - bounds.bottom)
+            val distance = dx * dx + dy * dy
+            if (distance < minimum) {
+                minimum = distance
+                nearest = target
+            }
         }
-        val row = rows[rowIndex]
-        var column = 0
-        while (column < row.lastIndex) {
-            if (x < row[column].touchBounds.right) break
-            column++
-        }
-        return row[column].view
+        return nearest?.view
     }
 
     override fun dispatchTouchEvent(event: MotionEvent): Boolean {

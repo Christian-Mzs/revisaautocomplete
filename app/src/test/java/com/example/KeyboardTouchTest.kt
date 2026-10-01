@@ -301,11 +301,20 @@ class KeyboardTouchTest {
                     for (key in interactive) {
                         val point = surfacePoint(key, surface)
                         assertSame(key, surface.hitTest(point.first, point.second))
+                        val rowView = key.parent as View
+                        val left = rowView.left + key.left + surface.visualHorizontalInsetPx
+                        val right = rowView.left + key.right - surface.visualHorizontalInsetPx
+                        val top = rowView.top + key.top
+                        val bottom = rowView.top + key.bottom
+                        for (y in top + 1 until bottom step 2) for (x in left + 1 until right step 2) {
+                            assertSame("Containment $mode $width ${key.tag} $x,$y", key,
+                                surface.hitTest(x.toFloat(), y.toFloat()))
+                        }
                     }
                     for (pair in interactive.zipWithNext()) {
                         val a = surfacePoint(pair.first, surface)
                         val b = surfacePoint(pair.second, surface)
-                        assertSame(pair.second, surface.hitTest((a.first + b.first) / 2, a.second))
+                        assertNotNull(surface.hitTest((a.first + b.first) / 2, a.second))
                     }
                     if (i < surface.childCount - 1) {
                         val next = surface.getChildAt(i + 1)

@@ -6,8 +6,8 @@ package com.example.ui.keyboard
  */
 object KeyboardGeometry {
     const val SCALE = 1.05f
-    const val KEY_HEIGHT_DP = 45
-    const val NUMBER_KEY_HEIGHT_DP = 37
+    const val KEY_HEIGHT_DP = 47
+    const val NUMBER_KEY_HEIGHT_DP = 39
     const val KEY_HORIZONTAL_GAP_DP = 6
     const val KEY_VERTICAL_GAP_DP = 12
     const val SIDE_PADDING_DP = 6
