@@ -176,7 +176,7 @@ class KeyboardLayoutView(
     // TOOLBAR RENDERING (Corrigir | Traduzir | Switch IME)
     // -------------------------------------------------------------
     private fun renderToolbar() {
-        val snapshot = listOf(controller.uiState, controller.isSensitiveField, controller.clipboardSuggestion.suggestion)
+        val snapshot = listOf(controller.uiState, controller.isSensitiveField, controller.clipboardSuggestion.suggestion, controller.clipboardSuggestion.diagnosticSummary)
         if (snapshot == renderedToolbar) return
         renderedToolbar = snapshot
         toolbarContainer.removeAllViews()
@@ -192,6 +192,11 @@ class KeyboardLayoutView(
     }
 
     private fun renderIdleToolbar() {
+        if (com.example.BuildConfig.DEBUG && controller.clipboardSuggestion.suggestion == null &&
+            controller.clipboardSuggestion.diagnosticSummary != null) {
+            renderClipboardDiagnostic(controller.clipboardSuggestion.diagnosticSummary!!)
+            return
+        }
         controller.clipboardSuggestion.suggestion?.let { renderClipboardSuggestion(it); return }
         val row = LinearLayout(context).apply {
             orientation = HORIZONTAL
@@ -259,6 +264,24 @@ class KeyboardLayoutView(
         toolbarContainer.addView(row)
     }
 
+    private fun renderClipboardDiagnostic(summary: String) {
+        // Temporary debug UI; keep height/keys untouched. Tap to see the full safe summary.
+        val text = TextView(context).apply {
+            this.text = summary
+            textSize = 9f
+            setTextColor(keyTextColor)
+            maxLines = 3
+            ellipsize = TextUtils.TruncateAt.END
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dpToPx(6), 0, dpToPx(6), 0)
+            layoutParams = FrameLayout.LayoutParams(LayoutParams.MATCH_PARENT, dpToPx(G.TOOLBAR_HEIGHT_DP))
+            setOnClickListener {
+                android.widget.Toast.makeText(context, summary, android.widget.Toast.LENGTH_LONG).show()
+            }
+        }
+        toolbarContainer.addView(text)
+    }
+
     private fun renderClipboardSuggestion(item: com.example.clipboard.ClipboardSuggestion) {
         val row = LinearLayout(context).apply {
             orientation = HORIZONTAL
@@ -273,6 +296,11 @@ class KeyboardLayoutView(
             background = createRoundedDrawable(keyBgColor, dpToPx(18).toFloat())
             contentDescription = "Colar conteúdo copiado"
             setOnClickListener { controller.pasteClipboardSuggestion() }
+            if (com.example.BuildConfig.DEBUG) setOnLongClickListener {
+                android.widget.Toast.makeText(context, controller.clipboardSuggestion.diagnosticSummary
+                    ?: "IMG: diagnóstico indisponível", android.widget.Toast.LENGTH_LONG).show()
+                true
+            }
         }
         pill.addView(ImageView(context).apply {
             layoutParams = LayoutParams(dpToPx(32), dpToPx(32))
