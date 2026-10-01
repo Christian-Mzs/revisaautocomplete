@@ -12,7 +12,7 @@ import androidx.test.core.app.ApplicationProvider
 import com.example.ime.KeyboardController
 import com.example.ime.KeyboardMode
 import com.example.ui.keyboard.KeyboardLayoutView
-import com.example.ui.keyboard.EmojiSwipeGrid
+import com.example.ui.keyboard.EmojiCategoryPager
 import kotlinx.coroutines.test.TestScope
 import org.junit.Assert.*
 import org.junit.Test
@@ -30,7 +30,7 @@ class KeyboardNavigationTest {
             listOf(child) + if (child is ViewGroup) descendants(child) else emptyList()
         }
 
-    @Test fun emojiFooterHasOnlyLettersReturnAndClipboardPastesWholeItem() {
+    @Test fun emojiPanelHasOnlyDeleteAndClipboardPastesWholeItem() {
         val ic = FakeInputConnection()
         lateinit var view: KeyboardLayoutView
         val controller = KeyboardController(context, TestScope(), onStateChanged = { view.render() })
@@ -38,7 +38,9 @@ class KeyboardNavigationTest {
         controller.updateInputConnection(ic, EditorInfo().apply { inputType = InputType.TYPE_CLASS_TEXT })
         controller.setMode(KeyboardMode.EMOJIS)
         val labels = descendants(view).filterIsInstance<TextView>().map { it.text.toString() }
-        assertTrue(labels.contains("ABC"))
+        assertFalse(labels.contains("ABC"))
+        assertFalse(labels.contains("espaço"))
+        assertTrue(descendants(view).any { it.contentDescription == "Apagar caractere" })
         assertFalse(labels.contains("?123"))
         controller.clipboardHistory.add("texto copiado")
         descendants(view).first { it.contentDescription == "Área de transferência" }.performClick()
@@ -53,10 +55,10 @@ class KeyboardNavigationTest {
         assertEquals(KeyboardMode.LETTERS, controller.currentMode)
     }
 
-    @Test fun horizontalSwipesChangeCategoryAndVerticalScrollDoesNot() {
+    @Test fun horizontalPagerInterceptsHorizontalButNotVerticalGestures() {
         val changes = mutableListOf<Int>()
         val parent = android.widget.FrameLayout(context)
-        val grid = EmojiSwipeGrid(context) { changes.add(it) }
+        val grid = EmojiCategoryPager(context) { changes.add(it) }
         parent.addView(grid)
         fun event(action: Int, x: Float, y: Float): MotionEvent =
             MotionEvent.obtain(SystemClock.uptimeMillis(), SystemClock.uptimeMillis(), action, x, y, 0)
@@ -66,7 +68,7 @@ class KeyboardNavigationTest {
             }
             event(MotionEvent.ACTION_MOVE, 200f + dx, 200f + dy).let { e ->
                 val intercepted = grid.onInterceptTouchEvent(e)
-                if (expectedIntercept) assertTrue(intercepted)
+                assertEquals(expectedIntercept, intercepted)
                 e.recycle()
             }
             event(MotionEvent.ACTION_UP, 200f + dx, 200f + dy).let { e ->
@@ -76,6 +78,6 @@ class KeyboardNavigationTest {
         gesture(-150f, 5f, true)
         gesture(150f, 5f, true)
         gesture(5f, 150f, false)
-        assertEquals(listOf(1, -1), changes)
+        assertTrue(changes.all { it == 0 })
     }
 }

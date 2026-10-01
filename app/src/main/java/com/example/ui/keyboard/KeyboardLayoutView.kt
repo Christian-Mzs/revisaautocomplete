@@ -187,7 +187,7 @@ class KeyboardLayoutView(
     // TOOLBAR RENDERING (Corrigir | Traduzir | Switch IME)
     // -------------------------------------------------------------
     private fun renderToolbar() {
-        val snapshot = listOf(controller.uiState, controller.isSensitiveField, controller.clipboardSuggestion.suggestion)
+        val snapshot = listOf(controller.uiState, controller.isSensitiveField, controller.clipboardSuggestion.suggestion, controller.currentMode)
         if (snapshot == renderedToolbar) return
         renderedToolbar = snapshot
         toolbarContainer.removeAllViews()
@@ -214,11 +214,11 @@ class KeyboardLayoutView(
             layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, dpToPx(G.TOOLBAR_HEIGHT_DP))
         }
         row.addView(toolbarIcon(R.drawable.ic_toolbar_emoji, context.getString(R.string.open_emojis)).apply {
-            layoutParams = LayoutParams(dpToPx(42), LayoutParams.MATCH_PARENT)
+            layoutParams = LayoutParams(0, LayoutParams.MATCH_PARENT, 1f)
             contentDescription = context.getString(R.string.open_emojis)
-            setOnClickListener { clipboardOpen = false; controller.setMode(KeyboardMode.EMOJIS); renderKeys() }
+            setColorFilter(if (controller.currentMode == KeyboardMode.EMOJIS) primaryActionColor else keyTextColor)
+            setOnClickListener { clipboardOpen = false; controller.setMode(if (controller.currentMode == KeyboardMode.EMOJIS) KeyboardMode.LETTERS else KeyboardMode.EMOJIS); renderKeys() }
         })
-        addToolbarDivider(row)
         val enabled = !controller.isSensitiveField
         val correct = toolbarIcon(R.drawable.ic_toolbar_correct, context.getString(R.string.correct_action)).apply {
             isEnabled = enabled
@@ -229,7 +229,6 @@ class KeyboardLayoutView(
             }
         }
         row.addView(correct)
-        addToolbarDivider(row)
         val translate = toolbarIcon(R.drawable.ic_toolbar_translate, context.getString(R.string.translate_action)).apply {
             isEnabled = enabled
             setColorFilter(if (enabled) keyTextColor else keySubTextColor)
@@ -239,16 +238,7 @@ class KeyboardLayoutView(
             }
         }
         row.addView(translate)
-        addToolbarDivider(row)
-        val switch = FrameLayout(context).apply {
-            layoutParams = LayoutParams(0, LayoutParams.MATCH_PARENT, 1f)
-            contentDescription = context.getString(R.string.switch_keyboard)
-            background = RippleDrawable(ColorStateList.valueOf(pressedColor),
-                createRoundedDrawable(Color.TRANSPARENT, dpToPx(5).toFloat()), null)
-            addView(ImageView(context).apply {
-                setImageDrawable(ContextCompat.getDrawable(context, R.drawable.ic_switch_keyboard))
-                layoutParams = FrameLayout.LayoutParams(dpToPx(20), dpToPx(20), Gravity.CENTER)
-            })
+        val switch = toolbarIcon(R.drawable.ic_switch_keyboard, context.getString(R.string.switch_keyboard)).apply {
             setOnClickListener {
                 it.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
                 controller.onSwitchImeRequested()
@@ -256,10 +246,11 @@ class KeyboardLayoutView(
         }
         row.addView(ImageView(context).apply {
             contentDescription = "Área de transferência"
-            layoutParams = LayoutParams(dpToPx(38), LayoutParams.MATCH_PARENT)
+            layoutParams = LayoutParams(0, LayoutParams.MATCH_PARENT, 1f)
+            scaleType = ImageView.ScaleType.CENTER_INSIDE
             setImageDrawable(ContextCompat.getDrawable(context, R.drawable.ic_clipboard))
             setColorFilter(keyTextColor)
-            setPadding(dpToPx(9), dpToPx(9), dpToPx(9), dpToPx(9))
+            setPadding(dpToPx(10), dpToPx(10), dpToPx(10), dpToPx(10))
             isEnabled = !controller.isSensitiveField
             alpha = if (isEnabled) 1f else 0.4f
             setOnClickListener {
@@ -276,16 +267,14 @@ class KeyboardLayoutView(
     }
 
     private fun renderClipboardSuggestion(item: com.example.clipboard.ClipboardSuggestion) {
-        val row = LinearLayout(context).apply {
-            orientation = HORIZONTAL
-            gravity = Gravity.CENTER
+        val row = FrameLayout(context).apply {
             layoutParams = FrameLayout.LayoutParams(LayoutParams.MATCH_PARENT, dpToPx(G.TOOLBAR_HEIGHT_DP))
         }
         val pill = LinearLayout(context).apply {
             orientation = HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             setPadding(dpToPx(10), dpToPx(4), dpToPx(10), dpToPx(4))
-            layoutParams = LayoutParams(LayoutParams.WRAP_CONTENT, dpToPx(36))
+            layoutParams = FrameLayout.LayoutParams(LayoutParams.WRAP_CONTENT, dpToPx(36), Gravity.CENTER)
             background = createRoundedDrawable(keyBgColor, dpToPx(18).toFloat())
             contentDescription = "Colar conteúdo copiado"
             setOnClickListener { controller.pasteClipboardSuggestion() }
@@ -304,17 +293,17 @@ class KeyboardLayoutView(
             setPadding(dpToPx(8), 0, 0, 0)
             layoutParams = LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT)
             // Starts bounded before layout; later updates follow the actual toolbar width.
-            maxWidth = maxOf(0, (resources.displayMetrics.widthPixels * 0.65f).toInt() - dpToPx(78))
+            maxWidth = maxOf(0, (resources.displayMetrics.widthPixels * 0.65f).toInt() - dpToPx(38))
         }
         pill.addView(label)
         row.addView(pill)
-        row.addView(toolbarText("×", 26f).apply {
-            layoutParams = LayoutParams(dpToPx(40), LayoutParams.MATCH_PARENT)
+        row.addView(toolbarText("×", 39f).apply {
+            layoutParams = FrameLayout.LayoutParams(dpToPx(48), LayoutParams.MATCH_PARENT, Gravity.END or Gravity.CENTER_VERTICAL)
             contentDescription = "Dispensar sugestão de clipboard"
             setOnClickListener { controller.clipboardSuggestion.dismiss() }
         })
         row.addOnLayoutChangeListener { _, l, _, r, _, _, _, _, _ ->
-            val limit = maxOf(0, ((r - l) * 0.65f).toInt() - dpToPx(78))
+            val limit = maxOf(0, ((r - l) * 0.65f).toInt() - dpToPx(38))
             if (label.maxWidth != limit) label.maxWidth = limit
         }
         toolbarContainer.addView(row)
@@ -943,6 +932,15 @@ class KeyboardLayoutView(
             }
             addView(categoryRow)
         }
+        val pager = EmojiCategoryPager(context) { page ->
+            emojiCategoryIndex = page - 1
+            dismissPopup()
+            for (i in 0 until categoryRow.childCount) {
+                val tab = categoryRow.getChildAt(i) as TextView
+                tab.setTextColor(if (i == page) primaryActionColor else keyTextColor)
+                tab.compoundDrawables.filterNotNull().forEach { it.setTint(if (i == page) primaryActionColor else keyTextColor) }
+            }
+        }
         categories.forEachIndexed { index, category ->
             categoryRow.addView(TextView(context).apply {
                 text = category.icon
@@ -962,69 +960,59 @@ class KeyboardLayoutView(
                 setOnClickListener {
                     emojiCategoryIndex = index - 1
                     dismissPopup()
-                    renderKeys()
+                    pager.selectPage(index)
                 }
             })
         }
         keyboardKeysContainer.addView(categoryScroll)
 
-        val emojis = categories[emojiCategoryIndex + 1].emojis
-        val grid = EmojiSwipeGrid(context) { direction ->
-            val next = (emojiCategoryIndex + direction).coerceIn(-1, categories.size - 2)
-            if (next != emojiCategoryIndex) {
-                emojiCategoryIndex = next
-                dismissPopup()
-                renderKeys()
-            }
-        }.apply {
-            numColumns = 8
-            stretchMode = GridView.STRETCH_COLUMN_WIDTH
-            verticalSpacing = dpToPx(3)
-            isVerticalScrollBarEnabled = false
-            setSelector(android.graphics.drawable.ColorDrawable(Color.TRANSPARENT))
-            layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, 0, 1f).apply {
-                bottomMargin = dpToPx(G.KEY_VERTICAL_GAP_DP)
-            }
-            adapter = object : BaseAdapter() {
-                override fun getCount() = emojis.size
-                override fun getItem(position: Int) = emojis[position]
-                override fun getItemId(position: Int) = position.toLong()
-                override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
-                    val emoji = emojis[position]
-                    val key = (convertView as? TextView) ?: TextView(context).apply {
-                        textSize = G.LETTER_FONT_SP
-                        gravity = Gravity.CENTER
-                        includeFontPadding = false
-                        setTextColor(keyTextColor)
-                        layoutParams = android.widget.AbsListView.LayoutParams(
-                            ViewGroup.LayoutParams.MATCH_PARENT, dpToPx(G.KEY_HEIGHT_DP))
+        categories.forEach { category ->
+            val emojis = category.emojis
+            val grid = GridView(context).apply {
+                numColumns = 8
+                stretchMode = GridView.STRETCH_COLUMN_WIDTH
+                verticalSpacing = dpToPx(3)
+                isVerticalScrollBarEnabled = false
+                setSelector(android.graphics.drawable.ColorDrawable(Color.TRANSPARENT))
+                layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, 0, 1f).apply {
+                    bottomMargin = dpToPx(G.KEY_VERTICAL_GAP_DP)
+                }
+                adapter = object : BaseAdapter() {
+                    override fun getCount() = emojis.size
+                    override fun getItem(position: Int) = emojis[position]
+                    override fun getItemId(position: Int) = position.toLong()
+                    override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
+                        val emoji = emojis[position]
+                        val key = (convertView as? TextView) ?: TextView(context).apply {
+                            textSize = G.LETTER_FONT_SP
+                            gravity = Gravity.CENTER
+                            includeFontPadding = false
+                            setTextColor(keyTextColor)
+                            layoutParams = android.widget.AbsListView.LayoutParams(
+                                ViewGroup.LayoutParams.MATCH_PARENT, dpToPx(G.KEY_HEIGHT_DP))
+                        }
+                        keyBindings.remove(key)
+                        key.text = emoji
+                        key.contentDescription = emoji
+                        key.setOnClickListener { commitEmoji(emoji) }
+                        installCharacterTouch(key, emoji, EmojiCatalog.variants[emoji].orEmpty(), direct = true,
+                            emoji = true)
+                        return key
                     }
-                    keyBindings.remove(key)
-                    key.text = emoji
-                    key.contentDescription = emoji
-                    key.setOnClickListener { commitEmoji(emoji) }
-                    installCharacterTouch(key, emoji, EmojiCatalog.variants[emoji].orEmpty(), direct = true,
-                        emoji = true)
-                    return key
                 }
             }
+            pager.addPage(grid)
         }
-        keyboardKeysContainer.addView(grid)
-
-        val bottom = LinearLayout(context).apply {
-            orientation = HORIZONTAL
-            isMotionEventSplittingEnabled = true
-            layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, dpToPx(G.KEY_HEIGHT_DP))
+        pager.selectPage(emojiCategoryIndex + 1, animate = false)
+        val body = FrameLayout(context).apply {
+            layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, 0, 1f)
+            addView(pager, FrameLayout.LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
+            addView(createRepeatKey("⌫", G.BACKSPACE_KEY_WEIGHT, keyActionBgColor) {
+                controller.handleBackspace()
+            }.apply { contentDescription = "Apagar caractere" },
+                FrameLayout.LayoutParams(dpToPx(48), dpToPx(48), Gravity.END or Gravity.BOTTOM))
         }
-        bottom.addView(createSpecialKey("ABC", G.SYMBOL_KEY_WEIGHT, keyActionBgColor) {
-            controller.setMode(KeyboardMode.LETTERS)
-        })
-        bottom.addView(createSpaceKey("espaço", G.SPACE_KEY_WEIGHT))
-        bottom.addView(createRepeatKey("⌫", G.BACKSPACE_KEY_WEIGHT, keyActionBgColor) {
-            controller.handleBackspace()
-        })
-        bottom.addView(createActionKey(G.ACTION_KEY_WEIGHT, primaryActionColor) { controller.handleEnter() })
-        keyboardKeysContainer.addView(bottom)
+        keyboardKeysContainer.addView(body)
     }
 
     private fun addWeightedSpacer(row: LinearLayout, weight: Float, margin: Int = 0) {
