@@ -75,6 +75,7 @@ class KeyboardLayoutView(
     private var activePopup: PopupWindow? = null
     private var renderedKeys: Triple<KeyboardMode, ShiftState, ActionKeyType>? = null
     private var renderedToolbar: List<Any?>? = null
+    private var clipboardOpen = false
     private var emojiCategoryIndex = 0
     private val emojiPreferences by lazy { context.getSharedPreferences("emoji_recents", Context.MODE_PRIVATE) }
     private val recentEmojis: List<String>
@@ -126,6 +127,17 @@ class KeyboardLayoutView(
         addView(keyboardKeysContainer)
 
         render()
+    }
+
+    fun resetNavigation() {
+        clipboardOpen = false
+        emojiCategoryIndex = 0
+        renderedKeys = null
+        render()
+    }
+
+    fun refreshClipboard() {
+        if (clipboardOpen) renderKeys()
     }
 
     fun render() {
@@ -189,7 +201,7 @@ class KeyboardLayoutView(
         row.addView(toolbarText("☺", G.SPECIAL_FONT_SP).apply {
             layoutParams = LayoutParams(dpToPx(42), LayoutParams.MATCH_PARENT)
             contentDescription = context.getString(R.string.open_emojis)
-            setOnClickListener { controller.setMode(KeyboardMode.EMOJIS) }
+            setOnClickListener { clipboardOpen = false; controller.setMode(KeyboardMode.EMOJIS); renderKeys() }
         })
         addToolbarDivider(row)
         val enabled = !controller.isSensitiveField
@@ -227,6 +239,21 @@ class KeyboardLayoutView(
                 controller.onSwitchImeRequested()
             }
         }
+        row.addView(ImageView(context).apply {
+            contentDescription = "Área de transferência"
+            layoutParams = LayoutParams(dpToPx(38), LayoutParams.MATCH_PARENT)
+            setImageDrawable(ContextCompat.getDrawable(context, R.drawable.ic_clipboard))
+            setColorFilter(keyTextColor)
+            setPadding(dpToPx(9), dpToPx(9), dpToPx(9), dpToPx(9))
+            isEnabled = !controller.isSensitiveField
+            alpha = if (isEnabled) 1f else 0.4f
+            setOnClickListener {
+                dismissPopup()
+                clipboardOpen = !clipboardOpen
+                if (clipboardOpen) controller.clipboardHistory.capture()
+                renderKeys()
+            }
+        })
         row.addView(switch)
         toolbarContainer.addView(row)
     }
@@ -604,9 +631,13 @@ class KeyboardLayoutView(
     private fun renderKeys() {
         cancelPointers()
         keyBindings.clear()
-        keyboardKeysContainer.centralized = controller.currentMode != KeyboardMode.EMOJIS
+        keyboardKeysContainer.centralized = !clipboardOpen && controller.currentMode != KeyboardMode.EMOJIS
         keyboardKeysContainer.removeAllViews()
 
+        if (clipboardOpen) {
+            renderClipboard()
+            return
+        }
         when (controller.currentMode) {
             KeyboardMode.LETTERS -> renderLetterKeys()
             KeyboardMode.NUMBERS -> renderNumberKeys()
@@ -814,8 +845,77 @@ class KeyboardLayoutView(
     // -------------------------------------------------------------
     // KEY BUILDERS
     // -------------------------------------------------------------
+    private fun renderClipboard() {
+        val header = LinearLayout(context).apply {
+            orientation = HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, dpToPx(G.NUMBER_KEY_HEIGHT_DP))
+        }
+        header.addView(TextView(context).apply {
+            text = "Área de transferência"
+            textSize = 16f
+            setTextColor(keyTextColor)
+            layoutParams = LayoutParams(0, LayoutParams.MATCH_PARENT, 1f)
+            gravity = Gravity.CENTER_VERTICAL
+        })
+        header.addView(TextView(context).apply {
+            text = "ABC"
+            contentDescription = "Voltar ao teclado"
+            setTextColor(keyTextColor)
+            gravity = Gravity.CENTER
+            layoutParams = LayoutParams(dpToPx(48), LayoutParams.MATCH_PARENT)
+            setOnClickListener {
+                clipboardOpen = false
+                controller.setMode(KeyboardMode.LETTERS)
+                renderKeys()
+            }
+        })
+        keyboardKeysContainer.addView(header)
+        val list = LinearLayout(context).apply { orientation = VERTICAL }
+        val scroll = android.widget.ScrollView(context).apply {
+            layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, 0, 1f)
+            addView(list)
+        }
+        keyboardKeysContainer.addView(scroll)
+        val entries = if (controller.isSensitiveField) emptyList() else controller.clipboardHistory.entries()
+        if (entries.isEmpty()) list.addView(TextView(context).apply {
+            text = "Os textos que você copiar aparecerão aqui (até 30 itens)."
+            setTextColor(keySubTextColor)
+            setPadding(dpToPx(12), dpToPx(16), dpToPx(12), dpToPx(16))
+        })
+        entries.forEach { item ->
+            val row = LinearLayout(context).apply {
+                orientation = HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(0, dpToPx(3), 0, dpToPx(3))
+            }
+            row.addView(TextView(context).apply {
+                text = item
+                textSize = 16f
+                setTextColor(keyTextColor)
+                maxLines = 3
+                ellipsize = TextUtils.TruncateAt.END
+                minHeight = dpToPx(48)
+                setPadding(dpToPx(12), dpToPx(8), dpToPx(12), dpToPx(8))
+                background = createRoundedDrawable(keyBgColor, dpToPx(6).toFloat())
+                layoutParams = LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f)
+                setOnClickListener { if (!controller.isSensitiveField) controller.handleDirectCharacter(item) }
+            })
+            row.addView(TextView(context).apply {
+                text = "×"
+                textSize = 24f
+                gravity = Gravity.CENTER
+                setTextColor(keySubTextColor)
+                contentDescription = "Excluir item"
+                layoutParams = LayoutParams(dpToPx(44), dpToPx(48))
+                setOnClickListener { controller.clipboardHistory.remove(item); renderKeys() }
+            })
+            list.addView(row)
+        }
+    }
+
     private fun renderEmojiKeys() {
-        val categories = listOf(EmojiCategory("Recentes", "◷", recentEmojis)) + EmojiCatalog.categories
+        val categories = listOf(EmojiCategory("Recentes", "", recentEmojis)) + EmojiCatalog.categories
         val categoryRow = LinearLayout(context).apply { orientation = HORIZONTAL }
         val categoryScroll = HorizontalScrollView(context).apply {
             isHorizontalScrollBarEnabled = false
@@ -827,6 +927,14 @@ class KeyboardLayoutView(
         categories.forEachIndexed { index, category ->
             categoryRow.addView(TextView(context).apply {
                 text = category.icon
+                if (index == 0) {
+                    setCompoundDrawablesWithIntrinsicBounds(null,
+                        ContextCompat.getDrawable(context, R.drawable.ic_recent_emojis)?.apply {
+                            setTint(if (emojiCategoryIndex == -1) primaryActionColor else keyTextColor)
+                        }, null, null)
+                    gravity = Gravity.CENTER
+                    setPadding(dpToPx(8), dpToPx(3), dpToPx(8), 0)
+                }
                 textSize = G.SPECIAL_FONT_SP
                 gravity = Gravity.CENTER
                 contentDescription = category.name
@@ -842,7 +950,14 @@ class KeyboardLayoutView(
         keyboardKeysContainer.addView(categoryScroll)
 
         val emojis = categories[emojiCategoryIndex + 1].emojis
-        val grid = GridView(context).apply {
+        val grid = EmojiSwipeGrid(context) { direction ->
+            val next = (emojiCategoryIndex + direction).coerceIn(-1, categories.size - 2)
+            if (next != emojiCategoryIndex) {
+                emojiCategoryIndex = next
+                dismissPopup()
+                renderKeys()
+            }
+        }.apply {
             numColumns = 8
             stretchMode = GridView.STRETCH_COLUMN_WIDTH
             verticalSpacing = dpToPx(3)
@@ -865,6 +980,7 @@ class KeyboardLayoutView(
                         layoutParams = android.widget.AbsListView.LayoutParams(
                             ViewGroup.LayoutParams.MATCH_PARENT, dpToPx(G.KEY_HEIGHT_DP))
                     }
+                    keyBindings.remove(key)
                     key.text = emoji
                     key.contentDescription = emoji
                     key.setOnClickListener { commitEmoji(emoji) }
@@ -883,9 +999,6 @@ class KeyboardLayoutView(
         }
         bottom.addView(createSpecialKey("ABC", G.SYMBOL_KEY_WEIGHT, keyActionBgColor) {
             controller.setMode(KeyboardMode.LETTERS)
-        })
-        bottom.addView(createSpecialKey("?123", G.SYMBOL_KEY_WEIGHT, keyActionBgColor) {
-            controller.setMode(KeyboardMode.NUMBERS)
         })
         bottom.addView(createSpaceKey("espaço", G.SPACE_KEY_WEIGHT))
         bottom.addView(createRepeatKey("⌫", G.BACKSPACE_KEY_WEIGHT, keyActionBgColor) {

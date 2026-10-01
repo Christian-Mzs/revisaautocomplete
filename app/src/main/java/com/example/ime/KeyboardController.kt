@@ -46,6 +46,7 @@ class KeyboardController(
     private val onStateChanged: () -> Unit,
     val onSwitchImeRequested: () -> Unit = {}
 ) {
+    val clipboardHistory = com.example.clipboard.ClipboardHistory(context)
     val languagePreferences = LanguagePreferences(context)
 
     var currentMode: KeyboardMode = KeyboardMode.LETTERS

@@ -21,6 +21,13 @@ class KeyboardInputMethodService : android.inputmethodservice.InputMethodService
     private lateinit var keyboardController: KeyboardController
     private var keyboardLayoutView: KeyboardLayoutView? = null
 
+    private val clipboardListener = android.content.ClipboardManager.OnPrimaryClipChangedListener {
+        if (!keyboardController.isSensitiveField) {
+            keyboardController.clipboardHistory.capture()
+            keyboardLayoutView?.refreshClipboard()
+        }
+    }
+
     companion object {
         private const val TAG = "KeyboardCorretorIME"
     }
@@ -39,6 +46,7 @@ class KeyboardInputMethodService : android.inputmethodservice.InputMethodService
                 switchToNextIme()
             }
         )
+        keyboardController.clipboardHistory.start(clipboardListener)
     }
 
     override fun onCreateInputView(): View {
@@ -65,6 +73,9 @@ class KeyboardInputMethodService : android.inputmethodservice.InputMethodService
         super.onStartInputView(info, restarting)
         Log.d(TAG, "onStartInputView: pkg=${info?.packageName}, inputType=${info?.inputType}, restarting=$restarting")
         keyboardController.updateInputConnection(currentInputConnection, info)
+        keyboardController.setMode(KeyboardMode.LETTERS)
+        keyboardLayoutView?.resetNavigation()
+        if (!keyboardController.isSensitiveField) keyboardController.clipboardHistory.capture()
         keyboardLayoutView?.render()
     }
 
@@ -74,6 +85,8 @@ class KeyboardInputMethodService : android.inputmethodservice.InputMethodService
         keyboardLayoutView?.dismissPopup()
         InputMetrics.finishSession()
         keyboardController.cancelAction()
+        keyboardController.setMode(KeyboardMode.LETTERS)
+        keyboardLayoutView?.resetNavigation()
     }
 
     override fun onEvaluateInputViewShown(): Boolean {
@@ -115,6 +128,7 @@ class KeyboardInputMethodService : android.inputmethodservice.InputMethodService
     override fun onDestroy() {
         super.onDestroy()
         Log.d(TAG, "onDestroy: IME service shutting down")
+        keyboardController.clipboardHistory.stop(clipboardListener)
         serviceScope.cancel()
         keyboardLayoutView?.dismissPopup()
         keyboardLayoutView = null
