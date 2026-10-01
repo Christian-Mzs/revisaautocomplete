@@ -23,9 +23,13 @@ import kotlinx.coroutines.test.TestScope
 @OptIn(ExperimentalCoroutinesApi::class)
 class OfflineDictionaryTest {
     companion object {
+        private fun openDictionary(): java.io.InputStream =
+            OfflineDictionaryTest::class.java.classLoader
+                ?.getResourceAsStream(OfflineDictionary.ASSET_PATH)
+                ?: error("Missing test resource: ${OfflineDictionary.ASSET_PATH}. Check the test resources source set.")
+
         private val dictionary: OfflineDictionary by lazy {
-            val context = ApplicationProvider.getApplicationContext<Context>()
-            OfflineDictionary.read(context.assets.open(OfflineDictionary.ASSET_PATH))
+            OfflineDictionary.read(openDictionary())
         }
     }
 
@@ -52,8 +56,7 @@ class OfflineDictionaryTest {
     }
 
     @Test fun `facade retains accents and capitalization after asset loads`() {
-        val context = ApplicationProvider.getApplicationContext<Context>()
-        LocalSuggestionEngine.loadDictionary { context.assets.open(OfflineDictionary.ASSET_PATH) }
+        LocalSuggestionEngine.loadDictionary { openDictionary() }
         assertEquals(listOf("não", "nao"), LocalSuggestionEngine.suggest("nao"))
         assertEquals("TESTE", LocalSuggestionEngine.suggest("TESTE").first())
         assertTrue("Testando" in LocalSuggestionEngine.suggest("Teste"))
@@ -71,7 +74,7 @@ class OfflineDictionaryTest {
 
     @Test fun `dictionary suggestion tap replaces only current word without provider calls`() {
         val context = ApplicationProvider.getApplicationContext<Context>()
-        LocalSuggestionEngine.loadDictionary { context.assets.open(OfflineDictionary.ASSET_PATH) }
+        LocalSuggestionEngine.loadDictionary { openDictionary() }
         val scope = TestScope()
         val provider = FakeTranslationProvider()
         val controller = KeyboardController(context, scope, TranslationService(provider = provider),
@@ -88,7 +91,7 @@ class OfflineDictionaryTest {
 
     @Test fun `pending query cannot republish candidates after switching to password field`() {
         val context = ApplicationProvider.getApplicationContext<Context>()
-        LocalSuggestionEngine.loadDictionary { context.assets.open(OfflineDictionary.ASSET_PATH) }
+        LocalSuggestionEngine.loadDictionary { openDictionary() }
         val scope = TestScope()
         val controller = KeyboardController(context, scope, onStateChanged = {},
             suggestionDispatcher = StandardTestDispatcher(scope.testScheduler))
