@@ -27,6 +27,9 @@ import android.widget.LinearLayout
 import android.widget.PopupWindow
 import android.widget.ProgressBar
 import android.widget.TextView
+import android.widget.ScrollView
+import android.widget.GridLayout
+import kotlin.math.roundToInt
 import androidx.core.content.ContextCompat
 import com.example.R
 import com.example.ime.ActionKeyType
@@ -59,9 +62,13 @@ class KeyboardLayoutView(
 
     private var activePopup: PopupWindow? = null
     private val keyPreviews = mutableSetOf<KeyPreview>()
+    private val previewPool = mutableListOf<KeyPreview>()
+    private val previewAnchorLocation = IntArray(2)
+    private val previewContainerLocation = IntArray(2)
     private val pendingLongPresses = mutableSetOf<Runnable>()
     private var renderedKeys: Triple<KeyboardMode, ShiftState, ActionKeyType>? = null
     private var renderedToolbar: List<Any?>? = null
+    private var emojiCategoryIndex = 0
 
     // Clean, modern utility color palette (no flashy gradients or AI gimmicks)
     private val bgColor = Color.parseColor("#17191E")
@@ -91,7 +98,7 @@ class KeyboardLayoutView(
         keyboardKeysContainer = LinearLayout(context).apply {
             orientation = VERTICAL
             isMotionEventSplittingEnabled = true
-            layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT)
+            layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, keyboardKeysHeight())
         }
         addView(keyboardKeysContainer)
 
@@ -572,6 +579,7 @@ class KeyboardLayoutView(
             KeyboardMode.LETTERS -> renderLetterKeys()
             KeyboardMode.NUMBERS -> renderNumberKeys()
             KeyboardMode.SYMBOLS -> renderSymbolKeys()
+            KeyboardMode.EMOJIS -> renderEmojiKeys()
         }
     }
 
@@ -637,6 +645,10 @@ class KeyboardLayoutView(
         }
         r4.addView(numModeKey)
 
+        r4.addView(createSpecialKey("☺", G.EMOJI_KEY_WEIGHT, keyActionBgColor) {
+            controller.setMode(KeyboardMode.EMOJIS)
+        }.apply { contentDescription = context.getString(R.string.open_emojis) })
+
         r4.addView(createDirectCharKey(",", G.PUNCTUATION_KEY_WEIGHT))
         r4.addView(createSpaceKey("espaço", G.SPACE_KEY_WEIGHT))
         r4.addView(createDirectCharKey(".", G.PUNCTUATION_KEY_WEIGHT))
@@ -653,11 +665,13 @@ class KeyboardLayoutView(
     private fun renderNumberKeys() {
         // Row 1: 1 2 3 4 5 6 7 8 9 0
         val r1 = listOf("1", "2", "3", "4", "5", "6", "7", "8", "9", "0")
-        keyboardKeysContainer.addView(createDirectRow(r1))
+        keyboardKeysContainer.addView(createDirectRow(r1, G.NUMBER_KEY_HEIGHT_DP, G.NUMBER_FONT_SP))
 
         // Row 2: @ # $ % & * - + ( )
         val r2 = listOf("@", "#", "$", "%", "&", "*", "-", "+", "(", ")")
         keyboardKeysContainer.addView(createDirectRow(r2))
+
+        keyboardKeysContainer.addView(createDirectRow(listOf("£", "€", "¥", "¢", "°", "©", "®", "™", "\\", "|")))
 
         // Row 3: [=\<] ! " ' : ; / ? [Backspace]
         val r3 = LinearLayout(context).apply {
@@ -696,6 +710,10 @@ class KeyboardLayoutView(
         }
         r4.addView(abcKey)
 
+        r4.addView(createSpecialKey("☺", G.EMOJI_KEY_WEIGHT, keyActionBgColor) {
+            controller.setMode(KeyboardMode.EMOJIS)
+        }.apply { contentDescription = context.getString(R.string.open_emojis) })
+
         r4.addView(createDirectCharKey(",", G.PUNCTUATION_KEY_WEIGHT))
         r4.addView(createSpaceKey("espaço", G.SPACE_KEY_WEIGHT))
         r4.addView(createDirectCharKey(".", G.PUNCTUATION_KEY_WEIGHT))
@@ -709,6 +727,9 @@ class KeyboardLayoutView(
     }
 
     private fun renderSymbolKeys() {
+        keyboardKeysContainer.addView(createDirectRow(
+            listOf("1", "2", "3", "4", "5", "6", "7", "8", "9", "0"),
+            G.NUMBER_KEY_HEIGHT_DP, G.NUMBER_FONT_SP))
         // Row 1: ~ ` | • √ π ÷ × ¶ ∆
         val r1 = listOf("~", "`", "|", "•", "√", "π", "÷", "×", "¶", "∆")
         keyboardKeysContainer.addView(createDirectRow(r1))
@@ -754,6 +775,10 @@ class KeyboardLayoutView(
         }
         r4.addView(abcKey)
 
+        r4.addView(createSpecialKey("☺", G.EMOJI_KEY_WEIGHT, keyActionBgColor) {
+            controller.setMode(KeyboardMode.EMOJIS)
+        }.apply { contentDescription = context.getString(R.string.open_emojis) })
+
         r4.addView(createDirectCharKey(",", G.PUNCTUATION_KEY_WEIGHT))
         r4.addView(createSpaceKey("espaço", G.SPACE_KEY_WEIGHT))
         r4.addView(createDirectCharKey(".", G.PUNCTUATION_KEY_WEIGHT))
@@ -769,6 +794,78 @@ class KeyboardLayoutView(
     // -------------------------------------------------------------
     // KEY BUILDERS
     // -------------------------------------------------------------
+    private fun renderEmojiKeys() {
+        val categoryRow = LinearLayout(context).apply {
+            orientation = HORIZONTAL
+            layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, dpToPx(G.NUMBER_KEY_HEIGHT_DP)).apply {
+                bottomMargin = dpToPx(G.KEY_VERTICAL_GAP_DP)
+            }
+        }
+        EmojiCatalog.categories.forEachIndexed { index, category ->
+            categoryRow.addView(createSpecialKey(category.icon, 1f,
+                if (index == emojiCategoryIndex) primaryActionColor else keyActionBgColor) {
+                emojiCategoryIndex = index
+                dismissPopup()
+                keyboardKeysContainer.removeAllViews()
+                renderEmojiKeys()
+            }.apply { contentDescription = category.name })
+        }
+        keyboardKeysContainer.addView(categoryRow)
+
+        val scroll = ScrollView(context).apply {
+            isFillViewport = true
+            layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, 0, 1f).apply {
+                bottomMargin = dpToPx(G.KEY_VERTICAL_GAP_DP)
+            }
+        }
+        val grid = GridLayout(context).apply {
+            columnCount = 8
+            layoutParams = FrameLayout.LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT)
+        }
+        EmojiCatalog.categories[emojiCategoryIndex].emojis.forEach { emoji ->
+            val key = TextView(context).apply {
+                text = emoji
+                textSize = G.LETTER_FONT_SP
+                gravity = Gravity.CENTER
+                includeFontPadding = false
+                setTextColor(keyTextColor)
+                contentDescription = emoji
+                layoutParams = GridLayout.LayoutParams().apply {
+                    width = 0
+                    height = dpToPx(G.KEY_HEIGHT_DP)
+                    columnSpec = GridLayout.spec(GridLayout.UNDEFINED, GridLayout.FILL, 1f)
+                    val gap = dpToPx(G.KEY_HORIZONTAL_GAP_DP) / 2
+                    setMargins(gap, gap, gap, gap)
+                }
+                background = RippleDrawable(ColorStateList.valueOf(pressedColor),
+                    createRoundedDrawable(keyBgColor, dpToPx(G.KEY_CORNER_RADIUS_DP).toFloat()), null)
+                setOnClickListener { controller.handleDirectCharacter(emoji) }
+            }
+            installCharacterTouch(key, emoji, emptyList(), direct = true)
+            grid.addView(key)
+        }
+        scroll.addView(grid)
+        keyboardKeysContainer.addView(scroll)
+
+        val bottom = LinearLayout(context).apply {
+            orientation = HORIZONTAL
+            isMotionEventSplittingEnabled = true
+            layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, dpToPx(G.KEY_HEIGHT_DP))
+        }
+        bottom.addView(createSpecialKey("ABC", G.SYMBOL_KEY_WEIGHT, keyActionBgColor) {
+            controller.setMode(KeyboardMode.LETTERS)
+        })
+        bottom.addView(createSpecialKey("?123", G.SYMBOL_KEY_WEIGHT, keyActionBgColor) {
+            controller.setMode(KeyboardMode.NUMBERS)
+        })
+        bottom.addView(createSpaceKey("espaço", G.SPACE_KEY_WEIGHT))
+        bottom.addView(createRepeatKey("⌫", G.BACKSPACE_KEY_WEIGHT, keyActionBgColor) {
+            controller.handleBackspace()
+        })
+        bottom.addView(createActionKey(G.ACTION_KEY_WEIGHT, primaryActionColor) { controller.handleEnter() })
+        keyboardKeysContainer.addView(bottom)
+    }
+
     private fun addWeightedSpacer(row: LinearLayout, weight: Float, margin: Int = 0) {
         row.addView(View(context).apply {
             layoutParams = LayoutParams(0, LayoutParams.MATCH_PARENT, weight).apply {
@@ -1093,33 +1190,44 @@ class KeyboardLayoutView(
         return popup to (x + rootScreen[0] - rootLocation[0])
     }
 
-    private data class KeyPreview(val container: ViewGroup, val label: TextView) {
+    private class KeyPreview(val container: ViewGroup, val label: TextView) {
+        var generation = 0
         fun dismiss() { container.overlay.remove(label) }
     }
 
+    private fun releaseKeyPreview(preview: KeyPreview?) {
+        if (preview != null && keyPreviews.remove(preview)) {
+            preview.dismiss()
+            if (previewPool.size < 4) previewPool.add(preview)
+        }
+    }
+
     private fun showKeyPreview(anchor: View, char: String): KeyPreview {
-        val label = TextView(context).apply {
-            text = if (controller.shiftState != ShiftState.OFF) char.uppercase() else char.lowercase()
+        val container = rootView as? ViewGroup ?: this
+        val reusable = if (previewPool.isEmpty()) null else previewPool.removeAt(previewPool.lastIndex)
+        val preview = reusable?.takeIf { it.container === container } ?: KeyPreview(container, TextView(context).apply {
             textSize = G.LETTER_FONT_SP
             gravity = Gravity.CENTER
             setTextColor(keyTextColor)
             includeFontPadding = false
             background = createRoundedDrawable(keyActionBgColor, dpToPx(G.KEY_CORNER_RADIUS_DP).toFloat())
-        }
-        val container = rootView as? ViewGroup ?: this
-        val anchorLocation = IntArray(2)
-        val containerLocation = IntArray(2)
-        anchor.getLocationOnScreen(anchorLocation)
-        container.getLocationOnScreen(containerLocation)
+            maxLines = 1
+        })
+        preview.generation++
+        val label = preview.label
+        label.text = if (controller.shiftState != ShiftState.OFF) char.uppercase() else char.lowercase()
+        anchor.getLocationOnScreen(previewAnchorLocation)
+        container.getLocationOnScreen(previewContainerLocation)
         val width = anchor.width.coerceAtLeast(dpToPx(28))
         val height = dpToPx(G.KEY_HEIGHT_DP)
-        val x = anchorLocation[0] - containerLocation[0]
-        val y = anchorLocation[1] - containerLocation[1] - height - dpToPx(G.ACCENT_GAP_DP)
+        val x = previewAnchorLocation[0] - previewContainerLocation[0]
+        val y = previewAnchorLocation[1] - previewContainerLocation[1] - height - dpToPx(G.ACCENT_GAP_DP)
         label.measure(MeasureSpec.makeMeasureSpec(width, MeasureSpec.EXACTLY),
             MeasureSpec.makeMeasureSpec(height, MeasureSpec.EXACTLY))
         label.layout(x, y, x + width, y + height)
         container.overlay.add(label)
-        return KeyPreview(container, label).also { keyPreviews.add(it) }
+        keyPreviews.add(preview)
+        return preview
     }
 
     private fun showAccentsPopup(anchor: View, accents: List<String>): AccentStrip {
@@ -1156,7 +1264,7 @@ class KeyboardLayoutView(
         var strip: AccentStrip? = null
         val longPress = Runnable {
             if (pressed && accents.isNotEmpty()) {
-                preview?.let { it.dismiss(); keyPreviews.remove(it) }
+                releaseKeyPreview(preview)
                 preview = null
                 key.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
                 strip = showAccentsPopup(key, accents)
@@ -1170,7 +1278,7 @@ class KeyboardLayoutView(
                     strip = null
                     view.isPressed = true
                     view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
-                    preview?.dismiss()
+                    releaseKeyPreview(preview)
                     preview = showKeyPreview(view, char)
                     if (accents.isNotEmpty()) {
                         pendingLongPresses.add(longPress)
@@ -1195,10 +1303,10 @@ class KeyboardLayoutView(
                     if (direct) controller.handleDirectCharacter(char)
                     else controller.handleCharacter(if (active == null) char else accents[active.selected])
                     val releasedPreview = preview
+                    val generation = releasedPreview?.generation
                     preview = null
                     handler.postDelayed({
-                        releasedPreview?.dismiss()
-                        keyPreviews.remove(releasedPreview)
+                        if (releasedPreview?.generation == generation) releaseKeyPreview(releasedPreview)
                     }, 60)
                 }
                 MotionEvent.ACTION_CANCEL -> {
@@ -1206,7 +1314,7 @@ class KeyboardLayoutView(
                     pendingLongPresses.remove(longPress)
                     pressed = false
                     view.isPressed = false
-                    preview?.let { it.dismiss(); keyPreviews.remove(it) }
+                    releaseKeyPreview(preview)
                     preview = null
                     strip?.popup?.dismiss()
                     strip = null
@@ -1221,6 +1329,7 @@ class KeyboardLayoutView(
         pendingLongPresses.clear()
         keyPreviews.forEach { it.dismiss() }
         keyPreviews.clear()
+        previewPool.clear()
         activePopup?.dismiss()
         activePopup = null
     }
@@ -1233,10 +1342,13 @@ class KeyboardLayoutView(
     private fun dpToPx(dp: Int): Int {
         return TypedValue.applyDimension(
             TypedValue.COMPLEX_UNIT_DIP,
-            dp.toFloat(),
+            dp.toFloat() * G.SCALE,
             context.resources.displayMetrics
-        ).toInt()
+        ).roundToInt()
     }
+
+    private fun keyboardKeysHeight(): Int = dpToPx(G.NUMBER_KEY_HEIGHT_DP) +
+        4 * dpToPx(G.KEY_HEIGHT_DP) + 4 * dpToPx(G.KEY_VERTICAL_GAP_DP)
 
     private fun createRoundedDrawable(
         fillColor: Int,

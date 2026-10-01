@@ -15,6 +15,8 @@ import android.widget.TextView
 import androidx.test.core.app.ApplicationProvider
 import com.example.ime.KeyboardController
 import com.example.ime.ShiftState
+import com.example.ime.KeyboardMode
+import com.example.ui.keyboard.EmojiCatalog
 import com.example.ui.keyboard.KeyboardLayoutView
 import kotlinx.coroutines.test.TestScope
 import org.junit.Assert.*
@@ -163,6 +165,63 @@ class KeyboardTouchTest {
         touch(key, MotionEvent.ACTION_DOWN)
         touch(key, MotionEvent.ACTION_UP)
         assertSame(toolbar, (view.getChildAt(0) as FrameLayout).getChildAt(0))
+        view.dismissPopup()
+    }
+
+    @Test fun `all keyboard modes retain exactly the same height at multiple widths`() {
+        val (controller, view) = keyboard(FakeInputConnection())
+        for (width in listOf(720, 1080)) {
+            val heights = KeyboardMode.entries.map { mode ->
+                controller.setMode(mode)
+                view.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
+                    View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED))
+                view.layout(0, 0, width, view.measuredHeight)
+                if (mode != KeyboardMode.EMOJIS) {
+                    val rows = view.getChildAt(1) as LinearLayout
+                    assertEquals(5, rows.childCount)
+                    val last = rows.getChildAt(4)
+                    assertEquals(rows.height, last.bottom)
+                }
+                view.measuredHeight
+            }
+            assertEquals(1, heights.distinct().size)
+        }
+        view.dismissPopup()
+    }
+
+    @Test fun `emoji button inserts a whole emoji and allows returning to letters`() {
+        val ic = FakeInputConnection()
+        val (controller, view) = keyboard(ic)
+        fun descendants(group: ViewGroup): List<View> = (0 until group.childCount).flatMap {
+            val child = group.getChildAt(it)
+            listOf(child) + if (child is ViewGroup) descendants(child) else emptyList()
+        }
+        descendants(view).first { it.contentDescription?.toString() == context.getString(R.string.open_emojis) }.performClick()
+        assertEquals(KeyboardMode.EMOJIS, controller.currentMode)
+        val emoji = EmojiCatalog.categories.first().emojis.first()
+        descendants(view).filterIsInstance<TextView>().first { it.contentDescription?.toString() == emoji }.performClick()
+        assertEquals(emoji, ic.currentText)
+        controller.handleBackspace()
+        assertEquals("", ic.currentText)
+        val abc = descendants(view).filterIsInstance<TextView>().first { it.text.toString() == "ABC" }
+        (abc.parent as View).performClick()
+        assertEquals(KeyboardMode.LETTERS, controller.currentMode)
+        view.dismissPopup()
+    }
+
+    @Test fun `preview views are reused during sustained typing`() {
+        val (_, view) = keyboard(FakeInputConnection())
+        val key = keys(view).first { it.tag == "t" }
+        val poolField = KeyboardLayoutView::class.java.getDeclaredField("previewPool").apply { isAccessible = true }
+        var first: Any? = null
+        repeat(100) {
+            touch(key, MotionEvent.ACTION_DOWN)
+            touch(key, MotionEvent.ACTION_UP)
+            shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(61))
+            val pool = poolField.get(view) as List<*>
+            assertEquals(1, pool.size)
+            if (first == null) first = pool.single() else assertSame(first, pool.single())
+        }
         view.dismissPopup()
     }
 }

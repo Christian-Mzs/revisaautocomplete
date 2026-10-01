@@ -50,4 +50,5 @@
     <string name="privacy_info_title">Privacidade</string>
     <string name="privacy_info_body">O texto só é enviado ao serviço de tradução quando você toca em Corrigir ou Traduzir.\n\nEm campos de senha identificados pelo Android, essas funções são desativadas e o conteúdo não é enviado ao serviço de tradução.</string>
     <string name="switch_keyboard">Alternar teclado</string>
+    <string name="open_emojis">Abrir emojis</string>
 </resources>

@@ -18,7 +18,8 @@ import kotlinx.coroutines.launch
 enum class KeyboardMode {
     LETTERS,
     NUMBERS,
-    SYMBOLS
+    SYMBOLS,
+    EMOJIS
 }
 
 enum class ShiftState {
@@ -97,7 +98,13 @@ class KeyboardController(
         if (!selected.isNullOrEmpty()) {
             ic.commitText("", 1)
         } else {
-            ic.deleteSurroundingText(1, 0)
+            val before = if (isSensitiveField) null else ic.getTextBeforeCursor(64, 0)?.toString()
+            if (before == null) {
+                if (!ic.deleteSurroundingTextInCodePoints(1, 0)) ic.deleteSurroundingText(1, 0)
+            } else {
+                val length = GraphemeBackspace.deletionLength(before)
+                if (length > 0) ic.deleteSurroundingText(length, 0)
+            }
         }
     }
 
