@@ -34,7 +34,7 @@ class KeyboardLayoutCalibrationTest {
     // Golden landmarks measured from the supplied 691px-wide Samsung capture.
     // Normalize horizontally rather than assuming the screenshot's Android density.
     private val screenshotScale = 691f / 415f
-    private fun reference(expected: Float, actual: Float) = assertEquals(expected, actual * screenshotScale, 3f)
+    private fun reference(expected: Float, actual: Float) = assertEquals("Reference landmark $expected px (measured ${actual * screenshotScale} px)", expected, actual * screenshotScale, 3f)
 
     @Test fun `physical heights and row positions match reference without font scale inflation`() {
         val view = layout()
