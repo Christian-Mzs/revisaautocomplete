@@ -715,7 +715,7 @@ class KeyboardLayoutView(
         keyboardKeysContainer.addView(createKeyRow(r2, inset = true))
 
         // Row 3: [Shift] z x c v b n m [Backspace]
-        val r3 = LinearLayout(context).apply {
+        val r3 = KeyboardKeyRow(context).apply {
             orientation = HORIZONTAL
             isMotionEventSplittingEnabled = true
             layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, dpToPx(G.KEY_HEIGHT_DP)).apply {
@@ -752,7 +752,7 @@ class KeyboardLayoutView(
         keyboardKeysContainer.addView(r3)
 
         // Row 4: [?123] [ , ] [ Espaço ] [ . ] [ Action Key ]
-        val r4 = LinearLayout(context).apply {
+        val r4 = KeyboardKeyRow(context).apply {
             orientation = HORIZONTAL
             isMotionEventSplittingEnabled = true
             layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, dpToPx(G.KEY_HEIGHT_DP))
@@ -788,7 +788,7 @@ class KeyboardLayoutView(
         keyboardKeysContainer.addView(createDirectRow(listOf("£", "€", "¥", "¢", "°", "©", "®", "™", "\\", "|")))
 
         // Row 3: [=\<] ! " ' : ; / ? [Backspace]
-        val r3 = LinearLayout(context).apply {
+        val r3 = KeyboardKeyRow(context).apply {
             orientation = HORIZONTAL
             isMotionEventSplittingEnabled = true
             layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, dpToPx(G.KEY_HEIGHT_DP)).apply {
@@ -813,7 +813,7 @@ class KeyboardLayoutView(
         keyboardKeysContainer.addView(r3)
 
         // Row 4: [ABC] [ , ] [ Espaço ] [ . ] [ Action Key ]
-        val r4 = LinearLayout(context).apply {
+        val r4 = KeyboardKeyRow(context).apply {
             orientation = HORIZONTAL
             isMotionEventSplittingEnabled = true
             layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, dpToPx(G.KEY_HEIGHT_DP))
@@ -849,7 +849,7 @@ class KeyboardLayoutView(
         keyboardKeysContainer.addView(createDirectRow(r2))
 
         // Row 3: [?123] % _ < > [ ] « » [Backspace]
-        val r3 = LinearLayout(context).apply {
+        val r3 = KeyboardKeyRow(context).apply {
             orientation = HORIZONTAL
             isMotionEventSplittingEnabled = true
             layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, dpToPx(G.KEY_HEIGHT_DP)).apply {
@@ -874,7 +874,7 @@ class KeyboardLayoutView(
         keyboardKeysContainer.addView(r3)
 
         // Row 4: [ABC] [ , ] [ Espaço ] [ . ] [ Action Key ]
-        val r4 = LinearLayout(context).apply {
+        val r4 = KeyboardKeyRow(context).apply {
             orientation = HORIZONTAL
             isMotionEventSplittingEnabled = true
             layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, dpToPx(G.KEY_HEIGHT_DP))
@@ -1017,7 +1017,7 @@ class KeyboardLayoutView(
     }
 
     private fun createKeyRow(chars: List<String>, inset: Boolean = false): LinearLayout {
-        return LinearLayout(context).apply {
+        return KeyboardKeyRow(context).apply {
             orientation = HORIZONTAL
             isMotionEventSplittingEnabled = true
             layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, dpToPx(G.KEY_HEIGHT_DP)).apply {
@@ -1034,7 +1034,7 @@ class KeyboardLayoutView(
     private fun createDirectRow(
         chars: List<String>, height: Int = G.KEY_HEIGHT_DP, fontSize: Float = G.SYMBOL_FONT_SP
     ): LinearLayout {
-        return LinearLayout(context).apply {
+        return KeyboardKeyRow(context).apply {
             orientation = HORIZONTAL
             isMotionEventSplittingEnabled = true
             layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, dpToPx(height)).apply {
