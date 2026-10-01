@@ -94,8 +94,8 @@ class KeyboardHitGeometryTest {
     }
 
     @Test fun `vertical experiment leaves fonts and horizontal dimensions unchanged`() {
-        assertEquals(47, KeyboardGeometry.KEY_HEIGHT_DP)
-        assertEquals(39, KeyboardGeometry.NUMBER_KEY_HEIGHT_DP)
+        assertEquals(45, KeyboardGeometry.KEY_HEIGHT_DP)
+        assertEquals(37, KeyboardGeometry.NUMBER_KEY_HEIGHT_DP)
         assertEquals(31.5f, KeyboardGeometry.LETTER_FONT_SP, 0.001f)
         assertEquals(6, KeyboardGeometry.SIDE_PADDING_DP)
         assertEquals(6, KeyboardGeometry.KEY_HORIZONTAL_GAP_DP)
