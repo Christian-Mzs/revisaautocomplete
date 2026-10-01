@@ -192,8 +192,7 @@ class KeyboardLayoutView(
     }
 
     private fun renderIdleToolbar() {
-        if (com.example.BuildConfig.DEBUG && controller.clipboardSuggestion.suggestion == null &&
-            controller.clipboardSuggestion.diagnosticSummary != null) {
+        if (com.example.BuildConfig.DEBUG && controller.clipboardSuggestion.diagnosticSummary != null) {
             renderClipboardDiagnostic(controller.clipboardSuggestion.diagnosticSummary!!)
             return
         }
@@ -268,9 +267,9 @@ class KeyboardLayoutView(
         // Temporary debug UI; keep height/keys untouched. Tap to see the full safe summary.
         val text = TextView(context).apply {
             this.text = summary
-            textSize = 9f
+            textSize = 8f
             setTextColor(keyTextColor)
-            maxLines = 3
+            maxLines = 4
             ellipsize = TextUtils.TruncateAt.END
             gravity = Gravity.CENTER_VERTICAL
             setPadding(dpToPx(6), 0, dpToPx(6), 0)
@@ -560,7 +559,7 @@ class KeyboardLayoutView(
             text = textToDisplay
             setTextColor(Color.WHITE)
             textSize = 14f
-            maxLines = 3
+            maxLines = 4
         }
         previewScroll.addView(textContent)
         card.addView(previewScroll)
@@ -977,7 +976,7 @@ class KeyboardLayoutView(
                 text = item
                 textSize = 16f
                 setTextColor(keyTextColor)
-                maxLines = 3
+                maxLines = 4
                 ellipsize = TextUtils.TruncateAt.END
                 minHeight = dpToPx(48)
                 setPadding(dpToPx(12), dpToPx(8), dpToPx(12), dpToPx(8))

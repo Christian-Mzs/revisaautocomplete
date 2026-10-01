@@ -68,7 +68,7 @@ class ClipboardSuggestionController(
         if (!com.example.BuildConfig.DEBUG) return
         android.util.Log.d(DIAGNOSTIC_TAG, "$reason ${if (visible) diagnosticMetadata else ""} $details".trim())
         if (visible) {
-            val next = "IMG: $reason $diagnosticMetadata $details"
+            val next = "CLIP: $diagnosticMetadata${if (details.isEmpty()) "" else " $details"}\nreason=$reason"
             if (next != diagnosticSummary) { diagnosticSummary = next; onChanged() }
         }
     }
@@ -132,28 +132,36 @@ class ClipboardSuggestionController(
         job?.cancel()
         if (sensitive) { publish(null); clearDiagnostic(); trace("IMAGE_SKIP_SENSITIVE"); return }
         clearDiagnostic()
-        if (connection == null) { trace("IMAGE_SKIP_NO_CONNECTION"); publish(null); return }
-        if (editor == null) { trace("IMAGE_SKIP_NO_EDITOR"); publish(null); return }
+        if (connection == null) { trace("IMAGE_SKIP_NO_CONNECTION", visible = true); publish(null); return }
+        if (editor == null) { trace("IMAGE_SKIP_NO_EDITOR", visible = true); publish(null); return }
         val infoForLog = editor!!
         val editorMimes = EditorInfoCompat.getContentMimeTypes(infoForLog)
         trace("EDITOR", "package=${infoForLog.packageName?.takeIf { it.matches(Regex("[A-Za-z0-9_.]+")) } ?: "unknown"} inputType=${infoForLog.inputType} MIME=${editorMimes.map(::safeMime)}")
         val clipResult = runCatching { clipboard.primaryClip }
         if (clipResult.isFailure) trace("CLIPBOARD_READ_FAILED")
         val clip = clipResult.getOrNull()
-        if (clip == null) { trace("IMAGE_SKIP_NO_PRIMARY_CLIP", "primaryClip=false"); publish(null); return }
+        if (clip == null) {
+            diagnosticMetadata = "exists=N items=0 text=N uri=N scheme=null\nmime=[] imageCandidate=N editorMime=${editorMimes.map(::safeMime)}"
+            trace(if (clipResult.isFailure) "CLIPBOARD_READ_FAILED" else "NO_PRIMARY_CLIP", visible = true)
+            publish(null); return
+        }
         val markedSensitive = clip.description.extras?.getBoolean("android.content.extra.IS_SENSITIVE", false) == true
         if (markedSensitive) { trace("IMAGE_SKIP_SENSITIVE_CLIP"); publish(null); return }
-        if (clip.itemCount == 0) { trace("IMAGE_SKIP_EMPTY_CLIP", "primaryClip=true itemCount=0"); publish(null); return }
+        if (clip.itemCount == 0) {
+            diagnosticMetadata = "exists=Y items=0 text=N uri=N scheme=null\nmime=[] imageCandidate=N editorMime=${editorMimes.map(::safeMime)}"
+            trace("CLIPBOARD_EMPTY", visible = true); publish(null); return
+        }
         val item = clip.getItemAt(0)
         val types = (0 until clip.description.mimeTypeCount).map { clip.description.getMimeType(it) }
         val stamp = if (Build.VERSION.SDK_INT >= 26) clip.description.timestamp else 0L
         val scheme = when (item.uri?.scheme) { null -> "null"; "content" -> "content"; "file" -> "file"; else -> "other" }
         trace("CLIPBOARD", "primaryClip=true itemCount=${clip.itemCount} text=${item.text != null} uri=${item.uri != null} scheme=$scheme CLIP=${types.map(::safeMime)} timestampAvailable=${Build.VERSION.SDK_INT >= 26} IS_SENSITIVE=false")
         val looksLikeImage = item.uri != null || types.any { it.startsWith("image/") }
-        diagnosticMetadata = "URI=${if (item.uri != null) "Y" else "N"} SCHEME=$scheme CLIP=${types.map(::safeMime)} EDITOR=${editorMimes.map(::safeMime)}"
+        diagnosticMetadata = "exists=Y items=${clip.itemCount} text=${if (item.text != null) "Y" else "N"} uri=${if (item.uri != null) "Y" else "N"} scheme=$scheme\nmime=${types.map(::safeMime)} imageCandidate=${if (looksLikeImage) "Y" else "N"} editorMime=${editorMimes.map(::safeMime)}"
+        trace("CLIPBOARD_RECEIVED", visible = true)
         val key = "$revision:$stamp:${item.text}:${item.uri}:${types.joinToString()}"
         if (key != identity) { identity = key; dismissed = null }
-        if (dismissed == key) { trace("IMAGE_SKIP_DISMISSED", visible = looksLikeImage); publish(null); return }
+        if (dismissed == key) { trace(if (looksLikeImage) "IMAGE_SKIP_DISMISSED" else "CLIPBOARD_NOT_IMAGE_DISMISSED", visible = true); publish(null); return }
         // A URI or image description always takes priority over an incidental text label.
         if (item.uri != null || types.any { it.startsWith("image/") }) {
             val uri = item.uri
@@ -199,7 +207,7 @@ class ClipboardSuggestionController(
                 } else if (!sensitive) trace("IMAGE_SKIP_STALE_PREVIEW")
             }
         } else {
-            trace("CLIPBOARD_NOT_IMAGE")
+            trace("CLIPBOARD_NOT_IMAGE", visible = true)
             val text = item.text?.toString()
             publish(if (text.isNullOrBlank()) null else ClipboardSuggestion.Text(key, text))
         }

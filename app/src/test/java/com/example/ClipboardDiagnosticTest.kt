@@ -33,6 +33,31 @@ class ClipboardDiagnosticTest {
         ClipData.Item("private copied text", null, null, Uri.parse("$scheme://private.authority/private-path")))
     private fun logs() = ShadowLog.getLogsForTag(ClipboardSuggestionController.DIAGNOSTIC_TAG).joinToString { it.msg }
 
+    @Test fun `non image and absent clipboard always have visible safe summaries`() {
+        val c = ClipboardSuggestionController(context, TestScope(), {})
+        clipboard.clearPrimaryClip()
+        c.updateEditor(FakeInputConnection(), editor(), false)
+        assertTrue(c.diagnosticSummary!!.contains("exists=N"))
+        assertTrue(c.diagnosticSummary!!.contains("reason=NO_PRIMARY_CLIP"))
+        clipboard.setPrimaryClip(ClipData.newPlainText("secret label", "secret text"))
+        c.clipboardChanged()
+        assertTrue(c.diagnosticSummary!!.contains("reason=CLIPBOARD_NOT_IMAGE"))
+        assertTrue(c.diagnosticSummary!!.contains("text=Y uri=N scheme=null"))
+        assertTrue(c.diagnosticSummary!!.contains("imageCandidate=N"))
+        assertFalse(c.diagnosticSummary!!.contains("secret"))
+        // Unknown representation: no URI and no image MIME must also remain visible.
+        clipboard.setPrimaryClip(ClipData(ClipDescription("", arrayOf("application/octet-stream")),
+            ClipData.Item(android.content.Intent("private.action"))))
+        c.clipboardChanged()
+        assertTrue(c.diagnosticSummary!!.contains("text=N uri=N scheme=null"))
+        assertTrue(c.diagnosticSummary!!.contains("mime=[application/octet-stream]"))
+        assertTrue(c.diagnosticSummary!!.contains("reason=CLIPBOARD_NOT_IMAGE"))
+        c.refresh()
+        assertNotNull(c.diagnosticSummary)
+        c.updateEditor(FakeInputConnection(), editor(), true)
+        assertNull(c.diagnosticSummary)
+    }
+
     @Test fun `editor MIME rejection is explicit without probing URI or leaking content`() {
         val scope = TestScope()
         val c = ClipboardSuggestionController(context, scope, {},
@@ -42,7 +67,7 @@ class ClipboardDiagnosticTest {
         scope.advanceUntilIdle()
         assertNull(c.suggestion)
         assertTrue(c.diagnosticSummary!!.contains("IMAGE_SKIP_EDITOR_NO_IMAGE_MIME"))
-        assertTrue(c.diagnosticSummary!!.contains("EDITOR=[]"))
+        assertTrue(c.diagnosticSummary!!.contains("editorMime=[]"))
         assertTrue(logs().contains("OPEN=NOT_ATTEMPTED"))
         for (secret in listOf("private copied text", "private.authority", "private-path", "private label")) {
             assertFalse(logs().contains(secret)); assertFalse(c.diagnosticSummary!!.contains(secret))
