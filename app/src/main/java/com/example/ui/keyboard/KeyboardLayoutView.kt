@@ -192,11 +192,11 @@ class KeyboardLayoutView(
     }
 
     private fun renderIdleToolbar() {
-        if (com.example.BuildConfig.DEBUG && controller.clipboardSuggestion.diagnosticSummary != null) {
-            renderClipboardDiagnostic(controller.clipboardSuggestion.diagnosticSummary!!)
+        controller.clipboardSuggestion.suggestion?.let {
+            renderClipboardSuggestion(it)
+            addClipboardDiagnosticOverlay()
             return
         }
-        controller.clipboardSuggestion.suggestion?.let { renderClipboardSuggestion(it); return }
         val row = LinearLayout(context).apply {
             orientation = HORIZONTAL
             isMotionEventSplittingEnabled = true
@@ -261,12 +261,21 @@ class KeyboardLayoutView(
         })
         row.addView(switch)
         toolbarContainer.addView(row)
+        addClipboardDiagnosticOverlay()
+    }
+
+    private fun addClipboardDiagnosticOverlay() {
+        if (!com.example.BuildConfig.DEBUG || controller.isSensitiveField) return
+        controller.clipboardSuggestion.diagnosticSummary?.let { renderClipboardDiagnostic(it) }
     }
 
     private fun renderClipboardDiagnostic(summary: String) {
-        // Temporary debug UI; keep height/keys untouched. Tap to see the full safe summary.
+        // Keep the real toolbar as the first child. Tap the temporary overlay to reveal it.
         val text = TextView(context).apply {
             this.text = summary
+            tag = "clipboard_diagnostic_overlay"
+            contentDescription = "Diagnóstico do clipboard; toque para revelar ferramentas"
+            setBackgroundColor(keyBgColor)
             textSize = 8f
             setTextColor(keyTextColor)
             maxLines = 4
@@ -275,6 +284,7 @@ class KeyboardLayoutView(
             setPadding(dpToPx(6), 0, dpToPx(6), 0)
             layoutParams = FrameLayout.LayoutParams(LayoutParams.MATCH_PARENT, dpToPx(G.TOOLBAR_HEIGHT_DP))
             setOnClickListener {
+                visibility = View.GONE
                 android.widget.Toast.makeText(context, summary, android.widget.Toast.LENGTH_LONG).show()
             }
         }
