@@ -23,6 +23,7 @@ class ClipboardSuggestionTest {
     private val clipboard get() = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
     private val controller by lazy { ClipboardSuggestionController(context) {} }
     @Before fun clear() {
+        context.getSharedPreferences("clipboard_suggestion_dismissal", Context.MODE_PRIVATE).edit().clear().commit()
         clipboard.clearPrimaryClip()
         context.getSharedPreferences("clipboard_history", Context.MODE_PRIVATE).edit().clear().commit()
     }
@@ -48,6 +49,22 @@ class ClipboardSuggestionTest {
         assertEquals("copied", clipboard.primaryClip!!.getItemAt(0).text.toString())
         clipboard.setPrimaryClip(ClipData.newPlainText("", "new")); controller.clipboardChanged()
         assertEquals("new", controller.suggestion!!.text)
+    }
+    @Test fun `dismiss survives duplicate notification and controller recreation after switching IME`() {
+        clipboard.setPrimaryClip(ClipData.newPlainText("", "copied before switch"))
+        controller.updateEditor(FakeInputConnection(), false)
+        controller.dismiss()
+        controller.stop()
+        controller.clipboardChanged()
+        controller.updateEditor(FakeInputConnection(), false)
+        assertNull(controller.suggestion)
+        val recreated = ClipboardSuggestionController(context) {}
+        recreated.updateEditor(FakeInputConnection(), false)
+        recreated.clipboardChanged()
+        assertNull(recreated.suggestion)
+        clipboard.setPrimaryClip(ClipData.newPlainText("", "new copy"))
+        recreated.clipboardChanged()
+        assertEquals("new copy", recreated.suggestion!!.text)
     }
     @Test fun `URI media and image labels never become text suggestions or history`() {
         for (mime in listOf("image/png", "text/plain")) {

@@ -4,6 +4,7 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.os.Build
 import android.view.inputmethod.InputConnection
+import java.security.MessageDigest
 
 data class ClipboardSuggestion(val identity: String, val text: String)
 
@@ -13,8 +14,8 @@ class ClipboardSuggestionController(private val context: Context, private val on
     var suggestion: ClipboardSuggestion? = null
         private set
     private var identity: String? = null
-    private var dismissed: String? = null
-    private var revision = 0L
+    // Only a fingerprint is persisted; clipboard text is never stored here.
+    private val dismissal = context.getSharedPreferences("clipboard_suggestion_dismissal", Context.MODE_PRIVATE)
     private var connection: InputConnection? = null
     private var sensitive = true
 
@@ -25,9 +26,7 @@ class ClipboardSuggestionController(private val context: Context, private val on
     }
 
     fun clipboardChanged() {
-        revision++
-        identity = null
-        dismissed = null
+        // Android can notify again when IME access resumes without a new copy.
         refresh()
     }
 
@@ -37,13 +36,15 @@ class ClipboardSuggestionController(private val context: Context, private val on
         val text = clip?.plainTextOnly()
         if (text.isNullOrBlank()) { publish(null); return }
         val stamp = if (Build.VERSION.SDK_INT >= 26) clip?.description?.timestamp ?: 0L else 0L
-        val key = "$revision:$stamp:$text"
-        if (identity != key) { identity = key; dismissed = null }
-        publish(if (dismissed == key) null else ClipboardSuggestion(key, text))
+        val key = MessageDigest.getInstance("SHA-256")
+            .digest("$stamp:$text".toByteArray(Charsets.UTF_8))
+            .joinToString("") { "%02x".format(it.toInt() and 0xff) }
+        identity = key
+        publish(if (dismissal.getString("item", null) == key) null else ClipboardSuggestion(key, text))
     }
 
     fun dismiss() {
-        dismissed = identity
+        identity?.let { dismissal.edit().putString("item", it).apply() }
         publish(null)
     }
 

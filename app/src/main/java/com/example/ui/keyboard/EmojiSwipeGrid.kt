@@ -7,7 +7,6 @@ import android.view.ViewConfiguration
 import android.widget.HorizontalScrollView
 import android.widget.LinearLayout
 import kotlin.math.abs
-import kotlin.math.roundToInt
 
 /** Real neighboring pages follow the finger; vertical gestures remain with each emoji grid. */
 internal class EmojiCategoryPager(context: Context, private val changed: (Int) -> Unit) : HorizontalScrollView(context) {
@@ -56,12 +55,22 @@ internal class EmojiCategoryPager(context: Context, private val changed: (Int) -
         return super.onInterceptTouchEvent(event) || horizontal
     }
     override fun onTouchEvent(event: MotionEvent): Boolean {
+        if (event.actionMasked == MotionEvent.ACTION_DOWN) {
+            startX = event.x; startY = event.y; horizontal = false
+        } else if (event.actionMasked == MotionEvent.ACTION_MOVE) {
+            val dx = abs(event.x - startX); val dy = abs(event.y - startY)
+            if (dx > slop && dx > dy * 1.5f) horizontal = true
+        }
         val handled = super.onTouchEvent(event)
         if (event.actionMasked == MotionEvent.ACTION_UP || event.actionMasked == MotionEvent.ACTION_CANCEL) {
             // Stop the platform fling so it cannot carry us beyond the chosen page.
             fling(0)
-            selectPage(if (event.actionMasked == MotionEvent.ACTION_CANCEL) page else
-                (scrollX.toFloat() / width.coerceAtLeast(1)).roundToInt())
+            // A deliberate drag of 20% is enough; no need to cross half the display.
+            val dx = event.x - startX
+            val threshold = maxOf(slop * 3f, width * 0.20f)
+            val target = if (event.actionMasked == MotionEvent.ACTION_UP && horizontal && abs(dx) >= threshold)
+                page + if (dx < 0) 1 else -1 else page
+            selectPage(target)
             horizontal = false
         }
         return handled

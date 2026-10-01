@@ -40,6 +40,16 @@ class EmojiSwipeGridTest {
         assertEquals(1, selected.last())
         pager.selectPage(0, false)
         assertEquals(0, pager.scrollX)
+        dispatch(MotionEvent.ACTION_DOWN, 100f)
+        dispatch(MotionEvent.ACTION_MOVE, 140f)
+        dispatch(MotionEvent.ACTION_MOVE, 250f)
+        dispatch(MotionEvent.ACTION_UP, 250f)
+        assertEquals(0, selected.last()) // at the first page, outward drag remains clamped
+        dispatch(MotionEvent.ACTION_DOWN, 400f)
+        dispatch(MotionEvent.ACTION_MOVE, 360f)
+        dispatch(MotionEvent.ACTION_MOVE, 250f)
+        dispatch(MotionEvent.ACTION_UP, 250f)
+        assertEquals(1, selected.last()) // only 25% of the viewport, not half
         pager.selectPage(2, false)
         assertEquals(1200, pager.scrollX)
         pager.selectPage(0, false)
