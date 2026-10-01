@@ -24,9 +24,18 @@ internal class EmojiCategoryPager(context: Context, private val changed: (Int) -
         changed(page)
         if (animate) smoothScrollTo(page * width, 0) else scrollTo(page * width, 0)
     }
+    override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+        val pageWidth = View.MeasureSpec.getSize(widthMeasureSpec)
+        for (i in 0 until pages.childCount) {
+            val child = pages.getChildAt(i)
+            if (child.layoutParams.width != pageWidth) {
+                child.layoutParams = LinearLayout.LayoutParams(pageWidth, LayoutParams.MATCH_PARENT)
+            }
+        }
+        super.onMeasure(widthMeasureSpec, heightMeasureSpec)
+    }
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
         super.onSizeChanged(w, h, oldw, oldh)
-        for (i in 0 until pages.childCount) pages.getChildAt(i).layoutParams = LinearLayout.LayoutParams(w, LayoutParams.MATCH_PARENT)
         post { scrollTo(page * w, 0) }
     }
     override fun requestDisallowInterceptTouchEvent(disallow: Boolean) {
