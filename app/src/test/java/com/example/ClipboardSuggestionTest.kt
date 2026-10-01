@@ -97,6 +97,7 @@ class ClipboardSuggestionTest {
         clipboard.setPrimaryClip(ClipData.newPlainText("", "second"))
         assertFalse(controller.paste()); assertEquals("", ic.currentText)
         assertTrue(controller.paste()); assertEquals("second", ic.currentText)
+        clipboard.setPrimaryClip(ClipData.newPlainText("", "third"))
         controller.clipboardChanged()
         controller.updateEditor(object : FakeInputConnection() {
             override fun commitText(text: CharSequence?, newCursorPosition: Int) = false
