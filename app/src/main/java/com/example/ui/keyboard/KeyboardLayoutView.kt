@@ -263,6 +263,7 @@ class KeyboardLayoutView(
             isEnabled = !controller.isSensitiveField
             alpha = if (isEnabled) 1f else 0.4f
             setOnClickListener {
+                if (controller.isSensitiveField) return@setOnClickListener
                 dismissPopup()
                 clipboardOpen = !clipboardOpen
                 clipboardPanel = null

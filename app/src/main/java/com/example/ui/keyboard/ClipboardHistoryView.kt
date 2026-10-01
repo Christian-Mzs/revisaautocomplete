@@ -74,6 +74,9 @@ internal class ClipboardHistoryView(
         renderHeader()
         empty.visibility = if (entries.isEmpty()) View.VISIBLE else View.GONE
         grid.visibility = if (entries.isEmpty()) View.GONE else View.VISIBLE
+        // GONE grids do not lay out adapter changes; detach to erase old sensitive cards.
+        if (entries.isEmpty()) grid.adapter = null
+        else if (grid.adapter == null) grid.adapter = adapter
         adapter.notifyDataSetChanged()
     }
 
