@@ -158,7 +158,7 @@ class KeyboardTouchTest {
         val ic = FakeInputConnection()
         val (_, view) = keyboard(ic)
         val toolbar = (view.getChildAt(0) as FrameLayout).getChildAt(0) as LinearLayout
-        val labels = (0 until toolbar.childCount).map { toolbar.getChildAt(it) }.filterIsInstance<TextView>()
+        val labels = (0 until toolbar.childCount).map { toolbar.getChildAt(it) }.filterIsInstance<TextView>().filter { it.contentDescription == null }
         assertEquals(listOf(context.getString(R.string.correct_action), context.getString(R.string.translate_action)),
             labels.map { it.text.toString() })
         val key = keys(view).first { it.tag == "t" }
@@ -198,6 +198,9 @@ class KeyboardTouchTest {
         }
         descendants(view).first { it.contentDescription?.toString() == context.getString(R.string.open_emojis) }.performClick()
         assertEquals(KeyboardMode.EMOJIS, controller.currentMode)
+        view.measure(View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED))
+        view.layout(0, 0, view.measuredWidth, view.measuredHeight)
         val emoji = EmojiCatalog.categories.first().emojis.first()
         descendants(view).filterIsInstance<TextView>().first { it.contentDescription?.toString() == emoji }.performClick()
         assertEquals(emoji, ic.currentText)
@@ -209,19 +212,31 @@ class KeyboardTouchTest {
         view.dismissPopup()
     }
 
-    @Test fun `preview views are reused during sustained typing`() {
-        val (_, view) = keyboard(FakeInputConnection())
-        val key = keys(view).first { it.tag == "t" }
-        val poolField = KeyboardLayoutView::class.java.getDeclaredField("previewPool").apply { isAccessible = true }
-        var first: Any? = null
-        repeat(100) {
+    @Test fun `sustained typing preserves spaces and characters without waiting for posted clicks`() {
+        val ic = object : FakeInputConnection() {
+            override fun getTextBeforeCursor(n: Int, flags: Int): CharSequence = error("Typing queried text")
+            override fun getTextAfterCursor(n: Int, flags: Int): CharSequence = error("Typing queried text")
+            override fun getSelectedText(flags: Int): CharSequence = error("Typing queried selection")
+        }
+        val (_, view) = keyboard(ic)
+        fun descendants(group: ViewGroup): List<View> = (0 until group.childCount).flatMap {
+            val child = group.getChildAt(it)
+            listOf(child) + if (child is ViewGroup) descendants(child) else emptyList()
+        }
+        val letterKeys = keys(view).associateBy { it.tag.toString() }
+        val space = descendants(view).filterIsInstance<TextView>()
+            .first { it.text.toString() == "espaço" }.parent as View
+        val expected = "teste de digitacao rapida com muitas palavras ".repeat(100)
+        expected.forEach { char ->
+            val key = if (char == ' ') space else letterKeys.getValue(char.toString())
             touch(key, MotionEvent.ACTION_DOWN)
             touch(key, MotionEvent.ACTION_UP)
-            shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(61))
-            val pool = poolField.get(view) as List<*>
-            assertEquals(1, pool.size)
-            if (first == null) first = pool.single() else assertSame(first, pool.single())
         }
+        // No looper idle: each release must have committed before the next touch.
+        assertEquals(expected, ic.currentText)
+        assertSame(letterKeys.getValue("t"), keys(view).first { it.tag == "t" })
+        val toolbar = (view.getChildAt(0) as FrameLayout).getChildAt(0) as LinearLayout
+        assertEquals(context.getString(R.string.open_emojis), toolbar.getChildAt(0).contentDescription)
         view.dismissPopup()
     }
 }

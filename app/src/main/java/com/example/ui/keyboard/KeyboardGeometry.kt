@@ -26,8 +26,7 @@ object KeyboardGeometry {
     const val THIRD_ROW_SPACER_WEIGHT = 0.2f
     const val SYMBOL_KEY_WEIGHT = 1.57f
     const val PUNCTUATION_KEY_WEIGHT = 1f
-    const val EMOJI_KEY_WEIGHT = 1f
-    const val SPACE_KEY_WEIGHT = 4.7f
+    const val SPACE_KEY_WEIGHT = 5.7f
     const val ACTION_KEY_WEIGHT = 1.57f
     // Half a letter cell on each side keeps the nine-letter row centered.
     const val SECOND_ROW_SIDE_INSET_WEIGHT = 0.5f
