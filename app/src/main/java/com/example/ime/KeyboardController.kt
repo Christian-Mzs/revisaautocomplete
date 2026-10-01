@@ -76,11 +76,12 @@ class KeyboardController(
     }
 
     fun handleCharacter(char: String) {
+        InputMetrics.character()
         val textToInsert = when (shiftState) {
             ShiftState.CAPS_LOCK, ShiftState.ON -> char.uppercase()
             ShiftState.OFF -> char.lowercase()
         }
-        inputConnection?.commitText(textToInsert, 1)
+        inputConnection?.let { commit(it, textToInsert) }
 
         if (shiftState == ShiftState.ON) {
             shiftState = ShiftState.OFF
@@ -89,27 +90,40 @@ class KeyboardController(
     }
 
     fun handleDirectCharacter(char: String) {
-        inputConnection?.commitText(char, 1)
+        InputMetrics.direct()
+        inputConnection?.let { commit(it, char) }
+    }
+
+    private fun commit(ic: InputConnection, text: String) {
+        InputMetrics.commit()
+        InputMetrics.commitResult(ic.commitText(text, 1))
     }
 
     fun handleBackspace() {
         val ic = inputConnection ?: return
         val selected = ic.getSelectedText(0)
         if (!selected.isNullOrEmpty()) {
-            ic.commitText("", 1)
+            commit(ic, "")
         } else {
             val before = if (isSensitiveField) null else ic.getTextBeforeCursor(64, 0)?.toString()
             if (before == null) {
-                if (!ic.deleteSurroundingTextInCodePoints(1, 0)) ic.deleteSurroundingText(1, 0)
+                InputMetrics.delete()
+                if (!ic.deleteSurroundingTextInCodePoints(1, 0)) {
+                    InputMetrics.delete()
+                    ic.deleteSurroundingText(1, 0)
+                }
             } else {
                 val length = GraphemeBackspace.deletionLength(before)
-                if (length > 0) ic.deleteSurroundingText(length, 0)
+                if (length > 0) {
+                    InputMetrics.delete()
+                    ic.deleteSurroundingText(length, 0)
+                }
             }
         }
     }
 
     fun handleSpace() {
-        inputConnection?.commitText(" ", 1)
+        inputConnection?.let { commit(it, " ") }
     }
 
     fun handleEnter() {
@@ -119,11 +133,12 @@ class KeyboardController(
         if (editorInfo != null) {
             val action = editorInfo.imeOptions and EditorInfo.IME_MASK_ACTION
             if (action != EditorInfo.IME_ACTION_NONE && action != EditorInfo.IME_ACTION_UNSPECIFIED) {
+                InputMetrics.editorAction()
                 ic.performEditorAction(action)
                 return
             }
         }
-        ic.commitText("\n", 1)
+        commit(ic, "\n")
     }
 
     fun getActionKeyType(): ActionKeyType {

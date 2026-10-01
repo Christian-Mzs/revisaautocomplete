@@ -252,4 +252,261 @@ class KeyboardTouchTest {
         assertEquals(context.getString(R.string.open_emojis), toolbar.getChildAt(0).contentDescription)
         view.dismissPopup()
     }
+    private fun surface(view: KeyboardLayoutView) =
+        view.getChildAt(1) as com.example.ui.keyboard.KeyboardSurfaceView
+
+    private fun surfacePoint(key: View, surface: View): Pair<Float, Float> {
+        var x = key.width / 2f
+        var y = key.height / 2f
+        var child = key
+        while (child !== surface) {
+            x += child.left; y += child.top
+            child = child.parent as View
+        }
+        return x to y
+    }
+
+    private fun surfaceEvent(surface: View, action: Int, ids: IntArray, points: List<Pair<Float, Float>>, flags: Int = 0) {
+        val time = SystemClock.uptimeMillis()
+        val properties = ids.map { id -> MotionEvent.PointerProperties().apply {
+            this.id = id; toolType = MotionEvent.TOOL_TYPE_FINGER
+        } }.toTypedArray()
+        val coordinates = points.map { point -> MotionEvent.PointerCoords().apply {
+            x = point.first; y = point.second; pressure = 1f; size = 1f
+        } }.toTypedArray()
+        val event = MotionEvent.obtain(time, time, action, ids.size, properties, coordinates,
+            0, 0, 1f, 1f, 0, 0, android.view.InputDevice.SOURCE_TOUCHSCREEN, flags)
+        try { assertTrue(surface.dispatchTouchEvent(event)) } finally { event.recycle() }
+    }
+
+    @Test fun `functional surface has no holes including exact boundaries in every non emoji mode`() {
+        val (controller, view) = keyboard(FakeInputConnection())
+        for (mode in listOf(KeyboardMode.LETTERS, KeyboardMode.NUMBERS, KeyboardMode.SYMBOLS)) {
+            controller.setMode(mode)
+            for (width in listOf(320, 720, 1080)) {
+                view.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
+                    View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED))
+                view.layout(0, 0, width, view.measuredHeight)
+                val surface = surface(view)
+                for (y in 0 until surface.height step 3) for (x in 0 until surface.width step 3) {
+                    assertNotNull("Hole at $mode $width $x $y", surface.hitTest(x.toFloat(), y.toFloat()))
+                }
+                assertNotNull(surface.hitTest(0f, 0f))
+                assertNotNull(surface.hitTest(surface.width - 0.01f, surface.height - 0.01f))
+                assertNull(surface.hitTest(-1f, 0f))
+                assertNull(surface.hitTest(0f, surface.height.toFloat()))
+                for (i in 0 until surface.childCount) {
+                    val row = surface.getChildAt(i) as LinearLayout
+                    val interactive = (0 until row.childCount).map { row.getChildAt(it) }.filter { it.isClickable }
+                    for (key in interactive) {
+                        val point = surfacePoint(key, surface)
+                        assertSame(key, surface.hitTest(point.first, point.second))
+                    }
+                    for (pair in interactive.zipWithNext()) {
+                        val a = surfacePoint(pair.first, surface)
+                        val b = surfacePoint(pair.second, surface)
+                        assertSame(pair.second, surface.hitTest((a.first + b.first) / 2, a.second))
+                    }
+                    if (i < surface.childCount - 1) {
+                        val next = surface.getChildAt(i + 1)
+                        val boundary = (row.top + row.height / 2f + next.top + next.height / 2f) / 2f
+                        for (x in 0 until surface.width step 3) assertNotNull(surface.hitTest(x.toFloat(), boundary))
+                    }
+                }
+            }
+        }
+        view.dismissPopup()
+    }
+
+    @Test fun `200 surface taps produce 200 activations and synchronous accepted commits`() {
+        val ic = FakeInputConnection()
+        val (_, view) = keyboard(ic)
+        val surface = surface(view)
+        val letters = keys(view).associateBy { it.tag.toString() }
+        com.example.ime.InputMetrics.reset()
+        val expected = "al".repeat(100)
+        expected.forEach { letter ->
+            val point = surfacePoint(letters.getValue(letter.toString()), surface)
+            surfaceEvent(surface, MotionEvent.ACTION_DOWN, intArrayOf(7), listOf(point))
+            surfaceEvent(surface, MotionEvent.ACTION_UP, intArrayOf(7), listOf(point))
+        }
+        assertEquals(expected, ic.currentText)
+        val counts = com.example.ime.InputMetrics.snapshot()
+        for (name in listOf("down", "up", "resolved", "activation", "character", "commitAttempt", "commitAccepted")) {
+            assertEquals(name, 200L, counts[name])
+        }
+        assertEquals(0L, counts["miss"])
+        assertEquals(0L, counts["abandoned"])
+        view.dismissPopup()
+    }
+
+    @Test fun `independent non sequential pointer ids preserve release order including same key`() {
+        for ((a, b) in listOf("q" to "p", "a" to "l", "c" to "n", "a" to "a")) {
+            for (firstReleased in listOf(0, 1)) {
+                val ic = FakeInputConnection()
+                val (_, view) = keyboard(ic)
+                val surface = surface(view)
+                val letters = keys(view).associateBy { it.tag.toString() }
+                val pa = surfacePoint(letters.getValue(a), surface)
+                val pb = surfacePoint(letters.getValue(b), surface)
+                repeat(100) {
+                    surfaceEvent(surface, MotionEvent.ACTION_DOWN, intArrayOf(7), listOf(pa))
+                    surfaceEvent(surface, MotionEvent.ACTION_POINTER_DOWN or (1 shl MotionEvent.ACTION_POINTER_INDEX_SHIFT),
+                        intArrayOf(7, 23), listOf(pa, pb))
+                    surfaceEvent(surface, MotionEvent.ACTION_POINTER_UP or (firstReleased shl MotionEvent.ACTION_POINTER_INDEX_SHIFT),
+                        intArrayOf(7, 23), listOf(pa, pb))
+                    surfaceEvent(surface, MotionEvent.ACTION_UP, intArrayOf(if (firstReleased == 0) 23 else 7),
+                        listOf(if (firstReleased == 0) pb else pa))
+                }
+                assertEquals((if (firstReleased == 0) a + b else b + a).repeat(100), ic.currentText)
+                view.dismissPopup()
+            }
+        }
+    }
+
+    @Test fun `surface cancel removes all pointers timers and leaves next tap working`() {
+        val ic = FakeInputConnection()
+        val (_, view) = keyboard(ic)
+        val surface = surface(view)
+        val letters = keys(view).associateBy { it.tag.toString() }
+        val a = surfacePoint(letters.getValue("a"), surface)
+        val c = surfacePoint(letters.getValue("c"), surface)
+        surfaceEvent(surface, MotionEvent.ACTION_DOWN, intArrayOf(7), listOf(a))
+        surfaceEvent(surface, MotionEvent.ACTION_POINTER_DOWN or (1 shl MotionEvent.ACTION_POINTER_INDEX_SHIFT),
+            intArrayOf(7, 23), listOf(a, c))
+        surfaceEvent(surface, MotionEvent.ACTION_CANCEL, intArrayOf(7, 23), listOf(a, c))
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(1000))
+        assertEquals("", ic.currentText)
+        assertFalse(letters.getValue("a").isPressed)
+        assertFalse(letters.getValue("c").isPressed)
+        surfaceEvent(surface, MotionEvent.ACTION_DOWN, intArrayOf(23), listOf(c))
+        surfaceEvent(surface, MotionEvent.ACTION_UP, intArrayOf(23), listOf(c))
+        assertEquals("c", ic.currentText)
+        view.dismissPopup()
+    }
+
+    @Test fun `held accent survives another pointer tap`() {
+        val ic = FakeInputConnection()
+        val (_, view) = keyboard(ic)
+        val surface = surface(view)
+        val letters = keys(view).associateBy { it.tag.toString() }
+        val c = surfacePoint(letters.getValue("c"), surface)
+        val l = surfacePoint(letters.getValue("l"), surface)
+        surfaceEvent(surface, MotionEvent.ACTION_DOWN, intArrayOf(7), listOf(c))
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(ViewConfiguration.getLongPressTimeout() + 1L))
+        surfaceEvent(surface, MotionEvent.ACTION_POINTER_DOWN or (1 shl MotionEvent.ACTION_POINTER_INDEX_SHIFT),
+            intArrayOf(7, 23), listOf(c, l))
+        surfaceEvent(surface, MotionEvent.ACTION_POINTER_UP or (1 shl MotionEvent.ACTION_POINTER_INDEX_SHIFT),
+            intArrayOf(7, 23), listOf(c, l))
+        surfaceEvent(surface, MotionEvent.ACTION_UP, intArrayOf(7), listOf(c))
+        assertEquals("lç", ic.currentText)
+        view.dismissPopup()
+    }
+
+    @Test fun `backspace repeat belongs to its pointer and stops on cancellation and detach cleanup`() {
+        val ic = FakeInputConnection("abcdef")
+        val (_, view) = keyboard(ic)
+        val surface = surface(view)
+        val row = surface.getChildAt(3) as LinearLayout
+        val backspace = row.getChildAt(row.childCount - 1)
+        val a = surfacePoint(keys(view).first { it.tag == "a" }, surface)
+        val back = surfacePoint(backspace, surface)
+        surfaceEvent(surface, MotionEvent.ACTION_DOWN, intArrayOf(7), listOf(back))
+        assertEquals("abcde", ic.currentText)
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(351))
+        assertEquals("abcd", ic.currentText)
+        surfaceEvent(surface, MotionEvent.ACTION_POINTER_DOWN or (1 shl MotionEvent.ACTION_POINTER_INDEX_SHIFT),
+            intArrayOf(7, 23), listOf(back, a))
+        surfaceEvent(surface, MotionEvent.ACTION_POINTER_UP or (1 shl MotionEvent.ACTION_POINTER_INDEX_SHIFT),
+            intArrayOf(7, 23), listOf(back, a))
+        assertEquals("abcda", ic.currentText)
+        surfaceEvent(surface, MotionEvent.ACTION_UP, intArrayOf(7), listOf(back))
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(1000))
+        assertEquals("abcda", ic.currentText)
+        surfaceEvent(surface, MotionEvent.ACTION_DOWN, intArrayOf(7), listOf(back))
+        view.dismissPopup()
+        val stopped = ic.currentText
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(1000))
+        assertEquals(stopped, ic.currentText)
+    }
+
+    @Test fun `cancelled pointer up leaves the other pointer active`() {
+        val ic = FakeInputConnection()
+        val (_, view) = keyboard(ic)
+        val surface = surface(view)
+        val letters = keys(view).associateBy { it.tag.toString() }
+        val a = surfacePoint(letters.getValue("a"), surface)
+        val l = surfacePoint(letters.getValue("l"), surface)
+        surfaceEvent(surface, MotionEvent.ACTION_DOWN, intArrayOf(7), listOf(a))
+        surfaceEvent(surface, MotionEvent.ACTION_POINTER_DOWN or (1 shl MotionEvent.ACTION_POINTER_INDEX_SHIFT),
+            intArrayOf(7, 23), listOf(a, l))
+        surfaceEvent(surface, MotionEvent.ACTION_POINTER_UP, intArrayOf(7, 23), listOf(a, l), MotionEvent.FLAG_CANCELED)
+        assertEquals("", ic.currentText)
+        assertTrue(letters.getValue("l").isPressed)
+        surfaceEvent(surface, MotionEvent.ACTION_UP, intArrayOf(23), listOf(l))
+        assertEquals("l", ic.currentText)
+        view.dismissPopup()
+    }
+
+    @Test fun `root dispatch never delegates ordinary surface touches to child listeners`() {
+        val ic = FakeInputConnection()
+        val (_, view) = keyboard(ic)
+        val surface = surface(view)
+        val key = keys(view).first { it.tag == "t" }
+        key.setOnTouchListener { _, _ -> error("Child intercepted central input") }
+        val row = key.parent as View
+        row.setOnTouchListener { _, _ -> error("Row intercepted central input") }
+        val point = surfacePoint(key, surface)
+        val rootPoint = point.first + surface.left to point.second + surface.top
+        surfaceEvent(view, MotionEvent.ACTION_DOWN, intArrayOf(7), listOf(rootPoint))
+        surfaceEvent(view, MotionEvent.ACTION_UP, intArrayOf(7), listOf(rootPoint))
+        assertEquals("t", ic.currentText)
+        view.dismissPopup()
+    }
+
+    @Test fun `touches in former spacers and row gaps really commit`() {
+        val ic = FakeInputConnection()
+        val (_, view) = keyboard(ic)
+        val surface = surface(view)
+        val letters = keys(view).associateBy { it.tag.toString() }
+        val a = surfacePoint(letters.getValue("a"), surface)
+        val l = surfacePoint(letters.getValue("l"), surface)
+        val g = surfacePoint(letters.getValue("g"), surface)
+        val h = surfacePoint(letters.getValue("h"), surface)
+        val t = surfacePoint(letters.getValue("t"), surface)
+        val points = listOf(0f to a.second, surface.width - 0.01f to l.second,
+            (g.first + h.first) / 2f to g.second,
+            t.first to (t.second + g.second) / 2f)
+        val expected = StringBuilder()
+        points.forEach { point ->
+            val target = surface.hitTest(point.first, point.second)!!
+            expected.append(target.tag as String)
+            surfaceEvent(view, MotionEvent.ACTION_DOWN, intArrayOf(7),
+                listOf(point.first + surface.left to point.second + surface.top))
+            surfaceEvent(view, MotionEvent.ACTION_UP, intArrayOf(7),
+                listOf(point.first + surface.left to point.second + surface.top))
+        }
+        assertEquals(expected.toString(), ic.currentText)
+        view.dismissPopup()
+    }
+
+    @Test fun `diagnostics distinguish a confirmed touch from an editor rejecting commit`() {
+        val ic = object : FakeInputConnection() {
+            override fun commitText(text: CharSequence?, newCursorPosition: Int) = false
+        }
+        val (_, view) = keyboard(ic)
+        val surface = surface(view)
+        val point = surfacePoint(keys(view).first { it.tag == "t" }, surface)
+        com.example.ime.InputMetrics.reset()
+        surfaceEvent(surface, MotionEvent.ACTION_DOWN, intArrayOf(7), listOf(point))
+        surfaceEvent(surface, MotionEvent.ACTION_UP, intArrayOf(7), listOf(point))
+        val counts = com.example.ime.InputMetrics.snapshot()
+        assertEquals(1L, counts["activation"])
+        assertEquals(1L, counts["commitAttempt"])
+        assertEquals(1L, counts["commitRejected"])
+        assertEquals(0L, counts["commitAccepted"])
+        assertEquals("", ic.currentText)
+        view.dismissPopup()
+    }
+
 }

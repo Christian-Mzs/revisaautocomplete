@@ -54,6 +54,9 @@ class KeyboardInputMethodService : android.inputmethodservice.InputMethodService
 
     override fun onStartInput(attribute: EditorInfo?, restarting: Boolean) {
         super.onStartInput(attribute, restarting)
+        // A held gesture must never commit into a newly connected editor.
+        keyboardLayoutView?.dismissPopup()
+        InputMetrics.reset()
         Log.d(TAG, "onStartInput: pkg=${attribute?.packageName}, inputType=${attribute?.inputType}, restarting=$restarting")
         keyboardController.updateInputConnection(currentInputConnection, attribute)
     }
@@ -69,6 +72,7 @@ class KeyboardInputMethodService : android.inputmethodservice.InputMethodService
         super.onFinishInputView(finishingInput)
         Log.d(TAG, "onFinishInputView: finishingInput=$finishingInput")
         keyboardLayoutView?.dismissPopup()
+        InputMetrics.finishSession()
         keyboardController.cancelAction()
     }
 

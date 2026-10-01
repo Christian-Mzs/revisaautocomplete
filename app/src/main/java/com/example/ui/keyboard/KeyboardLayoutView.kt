@@ -34,6 +34,7 @@ import kotlin.math.roundToInt
 import androidx.core.content.ContextCompat
 import com.example.R
 import com.example.ime.ActionKeyType
+import com.example.ime.InputMetrics
 import com.example.ime.KeyboardController
 import com.example.ime.KeyboardMode
 import com.example.ime.ShiftState
@@ -48,8 +49,18 @@ class KeyboardLayoutView(
 ) : LinearLayout(context) {
 
     private val toolbarContainer: FrameLayout
-    private val keyboardKeysContainer: LinearLayout
+    private val keyboardKeysContainer: KeyboardSurfaceView
     private val handler = Handler(Looper.getMainLooper())
+    private data class KeyBinding(val action: () -> Unit, val accents: List<String> = emptyList(),
+        val accentAction: ((String) -> Unit)? = null, val repeat: Boolean = false)
+    private class Press(val key: View, val binding: KeyBinding, val startX: Float) {
+        var strip: AccentStrip? = null
+        var timer: Runnable? = null
+    }
+    private val keyBindings = java.util.IdentityHashMap<View, KeyBinding>()
+    private val pointers = android.util.SparseArray<Press>()
+    private val screenPosition = IntArray(2)
+
 
     private val accentsMap = mapOf(
         'a' to listOf("á", "à", "ã", "â", "ä"),
@@ -62,7 +73,6 @@ class KeyboardLayoutView(
     )
 
     private var activePopup: PopupWindow? = null
-    private val pendingLongPresses = mutableSetOf<Runnable>()
     private var renderedKeys: Triple<KeyboardMode, ShiftState, ActionKeyType>? = null
     private var renderedToolbar: List<Any?>? = null
     private var emojiCategoryIndex = 0
@@ -104,7 +114,11 @@ class KeyboardLayoutView(
         }
         addView(toolbarContainer)
 
-        keyboardKeysContainer = LinearLayout(context).apply {
+        keyboardKeysContainer = KeyboardSurfaceView(context).apply {
+            visualHorizontalInsetPx = dpToPx(G.KEY_HORIZONTAL_GAP_DP) / 2
+            isKey = { keyBindings.containsKey(it) }
+            onPointerEvent = { event, key -> handleSurfaceTouch(event, key) }
+            onGeometryInvalidated = { cancelPointers() }
             orientation = VERTICAL
             isMotionEventSplittingEnabled = true
             layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, keyboardKeysHeight())
@@ -588,6 +602,9 @@ class KeyboardLayoutView(
     // KEYBOARD KEYS RENDERING
     // -------------------------------------------------------------
     private fun renderKeys() {
+        cancelPointers()
+        keyBindings.clear()
+        keyboardKeysContainer.centralized = controller.currentMode != KeyboardMode.EMOJIS
         keyboardKeysContainer.removeAllViews()
 
         when (controller.currentMode) {
@@ -818,8 +835,7 @@ class KeyboardLayoutView(
                 setOnClickListener {
                     emojiCategoryIndex = index - 1
                     dismissPopup()
-                    keyboardKeysContainer.removeAllViews()
-                    renderEmojiKeys()
+                    renderKeys()
                 }
             })
         }
@@ -1124,34 +1140,8 @@ class KeyboardLayoutView(
         }
         frame.addView(tv)
 
-        var isRepeating = false
-        val repeatRunnable = object : Runnable {
-            override fun run() {
-                if (isRepeating) {
-                    frame.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
-                    onAction()
-                    handler.postDelayed(this, 50)
-                }
-            }
-        }
-
-        frame.setOnTouchListener { v, event ->
-            when (event.action) {
-                MotionEvent.ACTION_DOWN -> {
-                    v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
-                    onAction()
-                    isRepeating = true
-                    handler.postDelayed(repeatRunnable, 350)
-                    true
-                }
-                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                    isRepeating = false
-                    handler.removeCallbacks(repeatRunnable)
-                    true
-                }
-                else -> false
-            }
-        }
+        installBinding(frame, KeyBinding(onAction, repeat = true))
+        frame.setOnClickListener { onAction() } // Accessibility only.
 
         return frame
     }
@@ -1195,7 +1185,6 @@ class KeyboardLayoutView(
     }
 
     private fun showAccentsPopup(anchor: View, accents: List<String>): AccentStrip {
-        dismissPopup()
         val row = LinearLayout(context).apply {
             orientation = HORIZONTAL
             isMotionEventSplittingEnabled = true
@@ -1222,68 +1211,132 @@ class KeyboardLayoutView(
     }
 
     private fun installCharacterTouch(key: View, char: String, accents: List<String>, direct: Boolean = false, emoji: Boolean = false) {
-        var pressed = false
-        var startX = 0f
-        var strip: AccentStrip? = null
-        val longPress = Runnable {
-            if (pressed && accents.isNotEmpty()) {
-                key.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
-                strip = showAccentsPopup(key, accents)
-            }
+        val commit: (String) -> Unit = { selected ->
+            if (emoji) commitEmoji(selected)
+            else if (direct) controller.handleDirectCharacter(selected)
+            else controller.handleCharacter(selected)
         }
-        key.setOnTouchListener { view, event ->
-            when (event.actionMasked) {
-                MotionEvent.ACTION_DOWN -> {
-                    pressed = true
-                    startX = event.rawX
-                    strip = null
-                    view.isPressed = true
-                    if (accents.isNotEmpty()) {
-                        pendingLongPresses.add(longPress)
-                        handler.postDelayed(longPress, android.view.ViewConfiguration.getLongPressTimeout().toLong())
-                    }
-                }
-                MotionEvent.ACTION_MOVE -> {
-                    strip?.let { active ->
-                        if (kotlin.math.abs(event.rawX - startX) > android.view.ViewConfiguration.get(context).scaledTouchSlop) {
-                            active.select(((event.rawX - active.screenLeft) / active.cellWidth).toInt())
-                        }
-                    }
-                }
-                MotionEvent.ACTION_UP -> {
-                    if (!pressed) return@setOnTouchListener true
-                    if (accents.isNotEmpty()) {
-                        handler.removeCallbacks(longPress)
-                        pendingLongPresses.remove(longPress)
-                    }
-                    val active = strip
-                    pressed = false
-                    view.isPressed = false
-                    strip = null
-                    active?.popup?.dismiss()
-                    val selected = if (active == null) char else accents[active.selected]
-                    if (emoji) commitEmoji(selected)
-                    else if (direct) controller.handleDirectCharacter(selected)
-                    else controller.handleCharacter(selected)
-                }
-                MotionEvent.ACTION_CANCEL -> {
-                    if (accents.isNotEmpty()) {
-                        handler.removeCallbacks(longPress)
-                        pendingLongPresses.remove(longPress)
-                    }
-                    pressed = false
-                    view.isPressed = false
-                    strip?.popup?.dismiss()
-                    strip = null
-                }
-            }
+        installBinding(key, KeyBinding({ commit(char) }, accents, commit))
+    }
+
+    @SuppressLint("ClickableViewAccessibility")
+    private fun installBinding(key: View, binding: KeyBinding) {
+        keyBindings[key] = binding
+        // Retain direct View dispatch for emoji scrolling and accessibility tests.
+        // Normal rows receive touch exclusively through KeyboardSurfaceView.
+        key.setOnTouchListener { _, event ->
+            handleSurfaceTouch(event, key, fromSurface = false)
             true
         }
     }
 
+    private fun handleSurfaceTouch(event: MotionEvent, resolved: View?, fromSurface: Boolean = true) {
+        val index = event.actionIndex
+        val id = event.getPointerId(index)
+        if (!fromSurface) InputMetrics.event(event.actionMasked, event.pointerCount)
+        when (event.actionMasked) {
+            MotionEvent.ACTION_DOWN, MotionEvent.ACTION_POINTER_DOWN -> {
+                if (fromSurface && event.actionMasked == MotionEvent.ACTION_DOWN) cancelPointers()
+                val binding = resolved?.let { keyBindings[it] }
+                if (resolved == null || binding == null) {
+                    InputMetrics.miss()
+                    return
+                }
+                InputMetrics.resolved()
+                val press = Press(resolved, binding, event.getX(index))
+                pointers.put(id, press)
+                resolved.isPressed = true
+                if (binding.repeat) {
+                    activate(press)
+                    // The action may rebuild the keyboard; never schedule a stale press.
+                    if (pointers[id] !== press) return
+                    val timer = object : Runnable {
+                        override fun run() {
+                            if (pointers[id] !== press) return
+                            activate(press)
+                            if (pointers[id] === press) handler.postDelayed(this, 50)
+                        }
+                    }
+                    press.timer = timer
+                    handler.postDelayed(timer, 350)
+                } else if (binding.accents.isNotEmpty()) {
+                    val timer = Runnable {
+                        if (pointers[id] === press) {
+                            press.strip = showAccentsPopup(resolved, binding.accents)
+                            resolved.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+                        }
+                    }
+                    press.timer = timer
+                    handler.postDelayed(timer, android.view.ViewConfiguration.getLongPressTimeout().toLong())
+                }
+            }
+            MotionEvent.ACTION_MOVE -> {
+                keyboardKeysContainer.getLocationOnScreen(screenPosition)
+                for (i in 0 until event.pointerCount) {
+                    val press = pointers[event.getPointerId(i)] ?: continue
+                    val strip = press.strip ?: continue
+                    if (kotlin.math.abs(event.getX(i) - press.startX) > android.view.ViewConfiguration.get(context).scaledTouchSlop) {
+                        // Direct emoji/key dispatch has local coordinates; central dispatch is surface-local.
+                        val origin = if (resolved != null) {
+                            resolved.getLocationOnScreen(screenPosition)
+                            screenPosition[0]
+                        } else screenPosition[0]
+                        strip.select(((event.getX(i) + origin - strip.screenLeft) / strip.cellWidth).toInt())
+                    }
+                }
+            }
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_POINTER_UP -> {
+                val press = pointers[id] ?: return
+                pointers.remove(id) // Remove before synchronous actions that may change mode.
+                press.timer?.let { handler.removeCallbacks(it) }
+                updatePressed(press.key)
+                val strip = press.strip
+                strip?.popup?.dismiss()
+                if ((event.flags and MotionEvent.FLAG_CANCELED) != 0) {
+                    if (!press.binding.repeat) InputMetrics.abandoned()
+                    return
+                }
+                if (!press.binding.repeat) {
+                    InputMetrics.activation()
+                    if (strip != null) press.binding.accentAction?.invoke(press.binding.accents[strip.selected])
+                    else press.binding.action()
+                    press.key.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                }
+            }
+            MotionEvent.ACTION_CANCEL -> {
+                if (fromSurface) cancelPointers() // Android cancels the entire surface stream.
+                else for (i in 0 until event.pointerCount) cancelPointer(event.getPointerId(i))
+            }
+        }
+    }
+
+    private fun activate(press: Press) {
+        InputMetrics.activation()
+        press.binding.action()
+        press.key.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+    }
+
+    private fun updatePressed(key: View) {
+        var held = false
+        for (i in 0 until pointers.size()) if (pointers.valueAt(i).key === key) held = true
+        key.isPressed = held
+    }
+
+    private fun cancelPointers() {
+        while (pointers.size() > 0) cancelPointer(pointers.keyAt(0))
+    }
+
+    private fun cancelPointer(id: Int) {
+        val press = pointers[id] ?: return
+        pointers.remove(id)
+        press.timer?.let { handler.removeCallbacks(it) }
+        press.strip?.popup?.dismiss()
+        updatePressed(press.key)
+        if (!press.binding.repeat) InputMetrics.abandoned()
+    }
+
     fun dismissPopup() {
-        pendingLongPresses.forEach { handler.removeCallbacks(it) }
-        pendingLongPresses.clear()
+        cancelPointers()
         activePopup?.dismiss()
         activePopup = null
     }
@@ -1314,23 +1367,9 @@ class KeyboardLayoutView(
         return android.graphics.drawable.InsetDrawable(states, gap, 0, gap, 0)
     }
 
-    @SuppressLint("ClickableViewAccessibility")
     private fun installTapTouch(key: View, action: () -> Unit) {
-        var pressed = false
-        key.setOnClickListener { action() } // Accessibility activation remains available.
-        key.setOnTouchListener { view, event ->
-            when (event.actionMasked) {
-                MotionEvent.ACTION_DOWN -> { pressed = true; view.isPressed = true }
-                MotionEvent.ACTION_UP -> {
-                    val activate = pressed
-                    pressed = false
-                    view.isPressed = false
-                    if (activate) action() // Commit synchronously, preserving touch order.
-                }
-                MotionEvent.ACTION_CANCEL -> { pressed = false; view.isPressed = false }
-            }
-            true
-        }
+        key.setOnClickListener { action() } // Accessibility activation only.
+        installBinding(key, KeyBinding(action))
     }
 
     private fun createRoundedDrawable(
