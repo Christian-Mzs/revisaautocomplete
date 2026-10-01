@@ -5,8 +5,8 @@ package com.example.ui.keyboard
  * Widths remain relative so the same geometry adapts to the available screen width.
  */
 object KeyboardGeometry {
-    const val KEY_HEIGHT_DP = 44
-    const val NUMBER_KEY_HEIGHT_DP = 36
+    const val KEY_HEIGHT_DP = 45
+    const val NUMBER_KEY_HEIGHT_DP = 37
     const val KEY_HORIZONTAL_GAP_DP = 6
     const val KEY_VERTICAL_GAP_DP = 12
     const val SIDE_PADDING_DP = 6
@@ -18,7 +18,7 @@ object KeyboardGeometry {
     const val SPECIAL_FONT_SP = 18f
     const val SHIFT_FONT_SP = 30f
     const val BACKSPACE_FONT_SP = 28f
-    const val SPACE_LABEL_FONT_SP = 14f
+    const val SPACE_LABEL_FONT_SP = 16f
     const val LETTER_KEY_WEIGHT = 1f
     const val SHIFT_KEY_WEIGHT = 1.4f
     const val BACKSPACE_KEY_WEIGHT = 1.4f
@@ -29,7 +29,10 @@ object KeyboardGeometry {
     const val ACTION_KEY_WEIGHT = 1.57f
     // Half a letter cell on each side keeps the nine-letter row centered.
     const val SECOND_ROW_SIDE_INSET_WEIGHT = 0.5f
-    const val TOOLBAR_HEIGHT_DP = 42
+    const val TOOLBAR_HEIGHT_DP = 44
+    const val TOOLBAR_BOTTOM_GAP_DP = 6
     const val TOOLBAR_ARROW_WIDTH_DP = 40
+    const val SUGGESTION_FONT_SP = 22f
+    const val TOOL_FONT_SP = 13.5f
     const val ACCENT_GAP_DP = 8
 }

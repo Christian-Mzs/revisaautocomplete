@@ -39,6 +39,7 @@ class KeyboardInputMethodService : android.inputmethodservice.InputMethodService
                 switchToNextIme()
             }
         )
+        keyboardController.loadDictionary()
     }
 
     override fun onCreateInputView(): View {

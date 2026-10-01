@@ -2,9 +2,18 @@ package com.example.ime
 
 import java.text.Normalizer
 import java.util.Locale
+import java.io.InputStream
 
-/** A small, offline vocabulary. It never changes editor text by itself. */
+/** Offline VERO vocabulary plus a small priority table for common accent ambiguities. */
 object LocalSuggestionEngine {
+    @Volatile private var dictionary: OfflineDictionary? = null
+    val isDictionaryReady: Boolean get() = dictionary != null
+
+    @Synchronized
+    fun loadDictionary(openAsset: () -> InputStream) {
+        if (dictionary == null) dictionary = OfflineDictionary.read(openAsset())
+    }
+
     private val locale = Locale.forLanguageTag("pt-BR")
     private val alternatives = mapOf(
         "nao" to listOf("não"), "voce" to listOf("você", "vocês"),
@@ -22,6 +31,14 @@ object LocalSuggestionEngine {
     )
 
     fun suggest(word: String): List<String> {
+        val normalized = OfflineDictionary.fold(word)
+        // Preserve the existing, deliberate ordering for common accent corrections.
+        if (normalized in alternatives) return suggestFallback(word)
+        val candidates = dictionary?.suggest(word) ?: return suggestFallback(word)
+        return (suggestFallback(word) + preserveCase(word, candidates)).distinct().take(3)
+    }
+
+    fun suggestFallback(word: String): List<String> {
         if (word.isBlank()) return emptyList()
         val lower = word.lowercase(locale)
         val normalized = Normalizer.normalize(lower, Normalizer.Form.NFD)
@@ -34,6 +51,11 @@ object LocalSuggestionEngine {
             alternatives.asSequence().filter { it.key.startsWith(normalized) }
                 .flatMap { it.value.asSequence() }.take(3).toList()
         }
+        return preserveCase(word, candidates)
+    }
+
+    private fun preserveCase(word: String, candidates: List<String>): List<String> {
+        if (word.isBlank()) return emptyList()
         return candidates.map { candidate ->
             when {
                 word == word.uppercase(locale) -> candidate.uppercase(locale)

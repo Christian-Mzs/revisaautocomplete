@@ -4,9 +4,14 @@ import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputConnection
 
 object CurrentWordReplacement {
-    fun replace(connection: InputConnection?, editorInfo: EditorInfo?, expected: CurrentWord, candidate: String): Boolean {
+    fun replace(
+        connection: InputConnection?, editorInfo: EditorInfo?, expected: CurrentWord, candidate: String,
+        allowedCandidates: List<String> = LocalSuggestionEngine.suggest(expected.text)
+    ): Boolean {
         // Recheck sensitivity, selection and word at the time of the tap.
-        if (candidate !in LocalSuggestionEngine.suggest(expected.text)) return false
+        if (candidate !in allowedCandidates || candidate.isEmpty() || !candidate.all {
+            it.isLetter() || Character.getType(it) == Character.NON_SPACING_MARK.toInt()
+        }) return false
         val current = CurrentWordExtractor.extract(connection, editorInfo) ?: return false
         if (current != expected) return false
         val ic = connection ?: return false

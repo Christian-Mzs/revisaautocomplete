@@ -10,6 +10,7 @@ import com.example.translation.SupportedLanguages
 import com.example.translation.TranslationResult
 import com.example.translation.TranslationService
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -43,7 +44,8 @@ class KeyboardController(
     private val correctionService: CorrectionService = CorrectionService(translationService),
     val consentManager: TranslationConsentManager = TranslationConsentManager.getInstance(context),
     private val onStateChanged: () -> Unit,
-    val onSwitchImeRequested: () -> Unit = {}
+    val onSwitchImeRequested: () -> Unit = {},
+    private val suggestionDispatcher: CoroutineDispatcher = Dispatchers.Default
 ) {
 
     var currentMode: KeyboardMode = KeyboardMode.LETTERS
@@ -59,6 +61,8 @@ class KeyboardController(
                 toolbarMode = ToolbarMode.SUGGESTIONS
                 refreshSuggestions()
             } else {
+                suggestionJob?.cancel()
+                suggestionRevision++
                 currentWord = null
                 suggestions = emptyList()
             }
@@ -69,6 +73,26 @@ class KeyboardController(
     var suggestions: List<String> = emptyList()
         private set
     private var currentWord: CurrentWord? = null
+    private var suggestionJob: Job? = null
+    private var suggestionRevision: Long = 0
+
+    fun loadDictionary() {
+        coroutineScope.launch {
+            try {
+                withContext(Dispatchers.IO) {
+                    LocalSuggestionEngine.loadDictionary { context.assets.open(OfflineDictionary.ASSET_PATH) }
+                }
+            } catch (error: java.io.IOException) {
+                android.util.Log.e("RevisaDictionary", "Dicionário local indisponível", error)
+                return@launch
+            } catch (error: IllegalArgumentException) {
+                android.util.Log.e("RevisaDictionary", "Índice local inválido", error)
+                return@launch
+            }
+            refreshSuggestions()
+            onStateChanged()
+        }
+    }
 
     private var inputConnection: InputConnection? = null
     var currentEditorInfo: EditorInfo? = null
@@ -149,10 +173,21 @@ class KeyboardController(
     }
 
     private fun refreshSuggestions() {
+        suggestionJob?.cancel()
+        val revision = ++suggestionRevision
         currentWord = if (uiState is TextActionUiState.Idle) {
             CurrentWordExtractor.extract(inputConnection, currentEditorInfo)
         } else null
-        suggestions = currentWord?.let { LocalSuggestionEngine.suggest(it.text) }.orEmpty()
+        val word = currentWord
+        suggestions = word?.let { LocalSuggestionEngine.suggestFallback(it.text) }.orEmpty()
+        if (word == null || !LocalSuggestionEngine.isDictionaryReady) return
+        suggestionJob = coroutineScope.launch {
+            val candidates = withContext(suggestionDispatcher) { LocalSuggestionEngine.suggest(word.text) }
+            if (suggestionRevision == revision && currentWord == word && uiState is TextActionUiState.Idle) {
+                suggestions = candidates
+                onStateChanged()
+            }
+        }
     }
 
     private fun onTypingChanged() {
@@ -169,7 +204,7 @@ class KeyboardController(
     fun applySuggestion(candidate: String): Boolean {
         if (uiState !is TextActionUiState.Idle || isSensitiveField || candidate !in suggestions) return false
         val expected = currentWord ?: return false
-        val replaced = CurrentWordReplacement.replace(inputConnection, currentEditorInfo, expected, candidate)
+        val replaced = CurrentWordReplacement.replace(inputConnection, currentEditorInfo, expected, candidate, suggestions)
         onTypingChanged()
         return replaced
     }

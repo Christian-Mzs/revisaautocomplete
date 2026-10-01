@@ -1,0 +1,15 @@
+{
+  "source": "https://github.com/LibreOffice/dictionaries/tree/1e848fbddd7fd8e03fb696ecc03ee1068fab141c/pt_BR",
+  "word_count": 2711424,
+  "front_coded_bytes": 14794326,
+  "runtime_index_bytes": 26317882,
+  "asset_bytes": 3811112,
+  "asset_sha256": "4aa4348416025b3e4eaa07a52dfaa395f3528c07a9c9a5c2dba7586a9ef31758",
+  "sources_sha256": {
+    "pt_BR.aff": "21d8ad2a769a60e17e2b5ea4ef11d4d593a58b9e2a82d642ef82d6a4c5523865",
+    "pt_BR.dic": "a38bfb26b68ece2834e79fe83e48d5792652970ace12db89d1b9674bf9933183",
+    "README_en.txt": "bb064f3db7ba5f5536da7d079773f692c5f928822e8aebc3d78259ff6cceb9e5",
+    "README_pt_BR.txt": "9974ce691fdc1fe731717d7a2dc668244405fdc2bf9bf3367eb9b29e85177c88",
+    "upstream-commit.txt": "2d75bb64929c8c0201d03dafb0343b9529d17d58425b7fc8aa3240faefebdf6b"
+  }
+}

@@ -76,7 +76,7 @@ class KeyboardLayoutView(
 
         toolbarContainer = FrameLayout(context).apply {
             layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT).apply {
-                bottomMargin = dpToPx(4)
+                bottomMargin = dpToPx(G.TOOLBAR_BOTTOM_GAP_DP)
             }
         }
         addView(toolbarContainer)
@@ -174,7 +174,7 @@ class KeyboardLayoutView(
         } else {
             for (index in 0 until 3) {
                 val candidate = controller.suggestions.getOrNull(index)
-                row.addView(toolbarText(candidate.orEmpty()).apply {
+                row.addView(toolbarText(candidate.orEmpty(), G.SUGGESTION_FONT_SP).apply {
                     isEnabled = candidate != null
                     typeface = if (index == 0) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
                     setTextColor(if (index == 0) Color.parseColor("#BFDBFE") else keyTextColor)
@@ -189,9 +189,9 @@ class KeyboardLayoutView(
         toolbarContainer.addView(row)
     }
 
-    private fun toolbarText(label: String): TextView = TextView(context).apply {
+    private fun toolbarText(label: String, fontSize: Float = G.TOOL_FONT_SP): TextView = TextView(context).apply {
         text = label
-        textSize = 13.5f
+        textSize = fontSize
         setTextColor(keyTextColor)
         gravity = Gravity.CENTER
         includeFontPadding = false
