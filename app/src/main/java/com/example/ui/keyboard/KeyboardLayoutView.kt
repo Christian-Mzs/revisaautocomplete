@@ -334,13 +334,6 @@ class KeyboardLayoutView(
             createRoundedDrawable(Color.TRANSPARENT, dpToPx(5).toFloat()), null)
     }
 
-    private fun addToolbarDivider(row: LinearLayout) {
-        row.addView(View(context).apply {
-            setBackgroundColor(pillBorderColor)
-            layoutParams = LayoutParams(dpToPx(1), dpToPx(20))
-        })
-    }
-
     private fun renderLanguageSelectorToolbar() {
         val container = LinearLayout(context).apply {
             orientation = VERTICAL
@@ -972,11 +965,11 @@ class KeyboardLayoutView(
                 numColumns = 8
                 stretchMode = GridView.STRETCH_COLUMN_WIDTH
                 verticalSpacing = dpToPx(3)
+                // Final rows can scroll clear of the floating delete button.
+                setPadding(0, 0, 0, dpToPx(48))
+                clipToPadding = false
                 isVerticalScrollBarEnabled = false
                 setSelector(android.graphics.drawable.ColorDrawable(Color.TRANSPARENT))
-                layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, 0, 1f).apply {
-                    bottomMargin = dpToPx(G.KEY_VERTICAL_GAP_DP)
-                }
                 adapter = object : BaseAdapter() {
                     override fun getCount() = emojis.size
                     override fun getItem(position: Int) = emojis[position]

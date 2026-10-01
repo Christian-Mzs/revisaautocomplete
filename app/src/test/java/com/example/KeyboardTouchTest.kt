@@ -174,6 +174,28 @@ class KeyboardTouchTest {
         view.dismissPopup()
     }
 
+    @Test fun `clipboard pill remains centered with larger dismiss button at right`() {
+        val (controller, view) = keyboard(FakeInputConnection())
+        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+        clipboard.setPrimaryClip(android.content.ClipData.newPlainText("", "Olá mundo"))
+        controller.clipboardSuggestion.clipboardChanged()
+        view.render()
+        view.measure(View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED))
+        view.layout(0, 0, 1080, view.measuredHeight)
+        val row = (view.getChildAt(0) as FrameLayout).getChildAt(0) as FrameLayout
+        val pill = row.getChildAt(0)
+        val close = row.getChildAt(1) as TextView
+        assertTrue(kotlin.math.abs((pill.left + pill.right) - row.width) <= 1)
+        assertEquals(row.width, close.right)
+        assertTrue(pill.right <= close.left)
+        assertEquals(39f * context.resources.displayMetrics.scaledDensity, close.textSize, 0.1f)
+        close.performClick()
+        assertNull(controller.clipboardSuggestion.suggestion)
+        assertEquals("Olá mundo", clipboard.primaryClip!!.getItemAt(0).text.toString())
+        view.dismissPopup()
+    }
+
     @Test fun `all keyboard modes retain exactly the same height at multiple widths`() {
         val (controller, view) = keyboard(FakeInputConnection())
         for (width in listOf(720, 1080)) {
