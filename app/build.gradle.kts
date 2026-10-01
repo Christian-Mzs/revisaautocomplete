@@ -44,9 +44,6 @@ android {
     buildConfig = true
   }
   testOptions { unitTests { isIncludeAndroidResources = true } }
-  sourceSets {
-    getByName("test").resources.srcDir("src/main/assets")
-  }
   dependenciesInfo {
     includeInApk = false
     includeInBundle = true

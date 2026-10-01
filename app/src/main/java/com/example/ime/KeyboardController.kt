@@ -6,16 +6,14 @@ import android.view.inputmethod.InputConnection
 import com.example.correction.CorrectionService
 import com.example.privacy.SensitiveFieldDetector
 import com.example.privacy.TranslationConsentManager
+import com.example.settings.LanguagePreferences
 import com.example.translation.SupportedLanguages
 import com.example.translation.TranslationResult
 import com.example.translation.TranslationService
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.launch
 
 enum class KeyboardMode {
     LETTERS,
@@ -45,9 +43,9 @@ class KeyboardController(
     private val correctionService: CorrectionService = CorrectionService(translationService),
     val consentManager: TranslationConsentManager = TranslationConsentManager.getInstance(context),
     private val onStateChanged: () -> Unit,
-    val onSwitchImeRequested: () -> Unit = {},
-    private val suggestionDispatcher: CoroutineDispatcher = Dispatchers.Default
+    val onSwitchImeRequested: () -> Unit = {}
 ) {
+    val languagePreferences = LanguagePreferences(context)
 
     var currentMode: KeyboardMode = KeyboardMode.LETTERS
         private set
@@ -56,48 +54,7 @@ class KeyboardController(
         private set
 
     var uiState: TextActionUiState = TextActionUiState.Idle
-        private set(value) {
-            field = value
-            if (value is TextActionUiState.Idle) {
-                toolbarMode = ToolbarMode.SUGGESTIONS
-                refreshSuggestions()
-            } else {
-                suggestionRefreshJob?.cancel()
-                suggestionJob?.cancel()
-                suggestionRevision++
-                currentWord = null
-                suggestions = emptyList()
-            }
-        }
-
-    var toolbarMode: ToolbarMode = ToolbarMode.SUGGESTIONS
         private set
-    var suggestions: List<String> = emptyList()
-        private set
-    private var currentWord: CurrentWord? = null
-    private var suggestionJob: Job? = null
-    private var suggestionRefreshJob: Job? = null
-    private var suggestionRevision: Long = 0
-
-    fun loadDictionary() {
-        coroutineScope.launch {
-            val started = android.os.SystemClock.elapsedRealtime()
-            try {
-                withContext(Dispatchers.IO) {
-                    LocalSuggestionEngine.loadDictionary { context.assets.open(OfflineDictionary.ASSET_PATH) }
-                }
-            } catch (error: java.io.IOException) {
-                android.util.Log.e("RevisaDictionary", "Dicionário local indisponível", error)
-                return@launch
-            } catch (error: IllegalArgumentException) {
-                android.util.Log.e("RevisaDictionary", "Índice local inválido", error)
-                return@launch
-            }
-            android.util.Log.i("RevisaDictionary", "Dicionário carregado em ${android.os.SystemClock.elapsedRealtime() - started} ms")
-            refreshSuggestions()
-            onStateChanged()
-        }
-    }
 
     private var inputConnection: InputConnection? = null
     var currentEditorInfo: EditorInfo? = null
@@ -111,9 +68,6 @@ class KeyboardController(
     fun updateInputConnection(ic: InputConnection?, editorInfo: EditorInfo?) {
         this.inputConnection = ic
         this.currentEditorInfo = editorInfo
-        toolbarMode = ToolbarMode.SUGGESTIONS
-        currentWord = null
-        suggestions = emptyList()
         if (uiState !is TextActionUiState.Processing) {
             uiState = TextActionUiState.Idle
         }
@@ -129,13 +83,12 @@ class KeyboardController(
 
         if (shiftState == ShiftState.ON) {
             shiftState = ShiftState.OFF
+            onStateChanged()
         }
-        onTypingChanged()
     }
 
     fun handleDirectCharacter(char: String) {
         inputConnection?.commitText(char, 1)
-        onTypingChanged()
     }
 
     fun handleBackspace() {
@@ -146,12 +99,10 @@ class KeyboardController(
         } else {
             ic.deleteSurroundingText(1, 0)
         }
-        onTypingChanged()
     }
 
     fun handleSpace() {
         inputConnection?.commitText(" ", 1)
-        onTypingChanged()
     }
 
     fun handleEnter() {
@@ -162,72 +113,10 @@ class KeyboardController(
             val action = editorInfo.imeOptions and EditorInfo.IME_MASK_ACTION
             if (action != EditorInfo.IME_ACTION_NONE && action != EditorInfo.IME_ACTION_UNSPECIFIED) {
                 ic.performEditorAction(action)
-                onTypingChanged()
                 return
             }
         }
         ic.commitText("\n", 1)
-        onTypingChanged()
-    }
-
-    fun toggleToolbarMode() {
-        if (uiState !is TextActionUiState.Idle) return
-        toolbarMode = if (toolbarMode == ToolbarMode.SUGGESTIONS) ToolbarMode.TOOLS else ToolbarMode.SUGGESTIONS
-        if (toolbarMode == ToolbarMode.SUGGESTIONS) refreshSuggestions()
-        onStateChanged()
-    }
-
-    private fun refreshSuggestions() {
-        suggestionRefreshJob?.cancel()
-        suggestionRefreshJob = null
-        suggestionJob?.cancel()
-        val revision = ++suggestionRevision
-        currentWord = if (uiState is TextActionUiState.Idle) {
-            CurrentWordExtractor.extract(inputConnection, currentEditorInfo)
-        } else null
-        val word = currentWord
-        suggestions = word?.let { LocalSuggestionEngine.suggestFallback(it.text) }.orEmpty()
-        if (word == null || !LocalSuggestionEngine.isDictionaryReady) return
-        suggestionJob = coroutineScope.launch {
-            val candidates = withContext(suggestionDispatcher) { LocalSuggestionEngine.suggest(word.text) }
-            if (suggestionRevision == revision && currentWord == word && uiState is TextActionUiState.Idle) {
-                suggestions = candidates
-                onStateChanged()
-            }
-        }
-    }
-
-    private fun onTypingChanged() {
-        toolbarMode = ToolbarMode.SUGGESTIONS
-        scheduleSuggestions()
-        onStateChanged()
-    }
-
-    fun onCursorChanged() {
-        scheduleSuggestions()
-    }
-
-    private fun scheduleSuggestions() {
-        suggestionRefreshJob?.cancel()
-        suggestionJob?.cancel()
-        suggestionRevision++
-        currentWord = null
-        suggestions = emptyList()
-        suggestionRefreshJob = coroutineScope.launch {
-            // Coalesce typing and selection callbacks before synchronous editor reads.
-            delay(40)
-            suggestionRefreshJob = null
-            refreshSuggestions()
-            onStateChanged()
-        }
-    }
-
-    fun applySuggestion(candidate: String): Boolean {
-        if (uiState !is TextActionUiState.Idle || isSensitiveField || candidate !in suggestions) return false
-        val expected = currentWord ?: return false
-        val replaced = CurrentWordReplacement.replace(inputConnection, currentEditorInfo, expected, candidate, suggestions)
-        onTypingChanged()
-        return replaced
     }
 
     fun getActionKeyType(): ActionKeyType {
@@ -303,7 +192,8 @@ class KeyboardController(
         }
 
         val job = coroutineScope.launch {
-            val result = correctionService.correct(extracted.textToCorrect)
+            val result = correctionService.correct(extracted.textToCorrect,
+                languagePreferences.correctionOutputLanguageCode)
 
             withContext(Dispatchers.Main) {
                 if (result.isSuccess && !result.correctedText.isNullOrBlank()) {
@@ -337,7 +227,8 @@ class KeyboardController(
         }
 
         if (!consentManager.hasAcceptedConsent()) {
-            val preferredLang = consentManager.getLastTranslationLanguageCode()
+            val preferredLang = SupportedLanguages.getSortedWithPreferred(
+                consentManager.getLastTranslationLanguageCode(), languagePreferences.translationLanguages).first().languageCode
             uiState = TextActionUiState.ConsentRequired(TextActionUiState.PendingAction.Translation(preferredLang))
             onStateChanged()
             return
@@ -350,6 +241,10 @@ class KeyboardController(
     fun selectLanguageAndTranslate(targetLanguageCode: String) {
         // SECURITY CHECK
         if (isSensitiveField) return
+        if (languagePreferences.translationLanguages.none { it.languageCode == targetLanguageCode }) {
+            requestTranslationPicker()
+            return
+        }
 
         consentManager.setLastTranslationLanguageCode(targetLanguageCode)
 

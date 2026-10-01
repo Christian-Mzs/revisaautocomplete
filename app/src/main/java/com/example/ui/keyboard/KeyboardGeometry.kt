@@ -31,8 +31,6 @@ object KeyboardGeometry {
     const val SECOND_ROW_SIDE_INSET_WEIGHT = 0.5f
     const val TOOLBAR_HEIGHT_DP = 44
     const val TOOLBAR_BOTTOM_GAP_DP = 6
-    const val TOOLBAR_ARROW_WIDTH_DP = 40
-    const val SUGGESTION_FONT_SP = 22f
     const val TOOL_FONT_SP = 13.5f
     const val ACCENT_GAP_DP = 8
 }

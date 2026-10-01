@@ -8,6 +8,10 @@ import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.RippleDrawable
 import android.text.TextUtils
+import android.text.SpannableString
+import android.text.Spanned
+import android.text.style.RelativeSizeSpan
+import android.text.style.ForegroundColorSpan
 import android.os.Handler
 import android.os.Looper
 import android.util.TypedValue
@@ -29,7 +33,6 @@ import com.example.ime.ActionKeyType
 import com.example.ime.KeyboardController
 import com.example.ime.KeyboardMode
 import com.example.ime.ShiftState
-import com.example.ime.ToolbarMode
 import com.example.ime.TextActionUiState
 import com.example.ui.keyboard.KeyboardGeometry as G
 import com.example.translation.SupportedLanguages
@@ -50,11 +53,13 @@ class KeyboardLayoutView(
         'i' to listOf("í", "ì", "î", "ï"),
         'o' to listOf("ó", "õ", "ô", "ò", "ö"),
         'u' to listOf("ú", "ù", "ü", "û"),
-        'c' to listOf("ç"),
+        'c' to listOf("ç", "ć", "ĉ", "č"),
         'n' to listOf("ñ")
     )
 
     private var activePopup: PopupWindow? = null
+    private val keyPreviews = mutableSetOf<KeyPreview>()
+    private val pendingLongPresses = mutableSetOf<Runnable>()
     private var renderedKeys: Triple<KeyboardMode, ShiftState, ActionKeyType>? = null
     private var renderedToolbar: List<Any?>? = null
 
@@ -71,6 +76,7 @@ class KeyboardLayoutView(
 
     init {
         orientation = VERTICAL
+        isMotionEventSplittingEnabled = true
         setBackgroundColor(bgColor)
         val pad = dpToPx(G.SIDE_PADDING_DP)
         setPadding(pad, dpToPx(4), pad, dpToPx(G.BOTTOM_PADDING_DP))
@@ -84,6 +90,7 @@ class KeyboardLayoutView(
 
         keyboardKeysContainer = LinearLayout(context).apply {
             orientation = VERTICAL
+            isMotionEventSplittingEnabled = true
             layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT)
         }
         addView(keyboardKeysContainer)
@@ -95,9 +102,31 @@ class KeyboardLayoutView(
         renderToolbar()
         val keys = Triple(controller.currentMode, controller.shiftState, controller.getActionKeyType())
         if (keys != renderedKeys) {
-            dismissPopup()
-            renderKeys()
+            val previous = renderedKeys
+            if (previous != null && previous.first == keys.first && previous.third == keys.third) {
+                updateLetterLabels(keyboardKeysContainer)
+            } else {
+                dismissPopup()
+                renderKeys()
+            }
             renderedKeys = keys
+        }
+    }
+
+    private fun updateLetterLabels(group: ViewGroup) {
+        for (index in 0 until group.childCount) {
+            val child = group.getChildAt(index)
+            val letter = child.tag as? String
+            if (child.tag == ShiftState::class.java && child is FrameLayout) {
+                (child.getChildAt(0) as TextView).text =
+                    if (controller.shiftState == ShiftState.CAPS_LOCK) "⇪" else "⇧"
+                val color = if (controller.shiftState == ShiftState.OFF) keyActionBgColor else primaryActionColor
+                child.background = RippleDrawable(ColorStateList.valueOf(pressedColor),
+                    createRoundedDrawable(color, dpToPx(G.KEY_CORNER_RADIUS_DP).toFloat()), null)
+            } else if (letter != null && child is FrameLayout) {
+                (child.getChildAt(0) as TextView).text =
+                    if (controller.shiftState != ShiftState.OFF) letter.uppercase() else letter.lowercase()
+            } else if (child is ViewGroup) updateLetterLabels(child)
         }
     }
 
@@ -105,8 +134,7 @@ class KeyboardLayoutView(
     // TOOLBAR RENDERING (Corrigir | Traduzir | Switch IME)
     // -------------------------------------------------------------
     private fun renderToolbar() {
-        val snapshot = listOf(controller.uiState, controller.toolbarMode,
-            controller.suggestions, controller.isSensitiveField)
+        val snapshot = listOf(controller.uiState, controller.isSensitiveField)
         if (snapshot == renderedToolbar) return
         renderedToolbar = snapshot
         toolbarContainer.removeAllViews()
@@ -124,73 +152,46 @@ class KeyboardLayoutView(
     private fun renderIdleToolbar() {
         val row = LinearLayout(context).apply {
             orientation = HORIZONTAL
+            isMotionEventSplittingEnabled = true
             gravity = Gravity.CENTER_VERTICAL
             layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, dpToPx(G.TOOLBAR_HEIGHT_DP))
         }
-        val tools = controller.toolbarMode == ToolbarMode.TOOLS
-        val arrow = toolbarText(if (tools) "‹" else "›").apply {
-            textSize = 26f
-            contentDescription = context.getString(if (tools) R.string.show_suggestions else R.string.show_tools)
-            layoutParams = LayoutParams(dpToPx(G.TOOLBAR_ARROW_WIDTH_DP), LayoutParams.MATCH_PARENT)
+        val enabled = !controller.isSensitiveField
+        val correct = toolbarText(context.getString(R.string.correct_action)).apply {
+            isEnabled = enabled
+            setTextColor(if (enabled) keyTextColor else keySubTextColor)
             setOnClickListener {
                 it.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
-                controller.toggleToolbarMode()
+                controller.requestCorrection()
             }
         }
-        row.addView(arrow)
+        row.addView(correct)
         addToolbarDivider(row)
-        if (tools) {
-            val enabled = !controller.isSensitiveField
-            val correct = toolbarText(context.getString(R.string.correct_action)).apply {
-                isEnabled = enabled
-                setTextColor(if (enabled) keyTextColor else keySubTextColor)
-                setOnClickListener {
-                    it.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
-                    controller.requestCorrection()
-                }
-            }
-            row.addView(correct)
-            addToolbarDivider(row)
-            val translate = toolbarText(context.getString(R.string.translate_action)).apply {
-                isEnabled = enabled
-                setTextColor(if (enabled) keyTextColor else keySubTextColor)
-                setOnClickListener {
-                    it.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
-                    controller.requestTranslationPicker()
-                }
-            }
-            row.addView(translate)
-            addToolbarDivider(row)
-            val switch = FrameLayout(context).apply {
-                layoutParams = LayoutParams(0, LayoutParams.MATCH_PARENT, 1f)
-                contentDescription = context.getString(R.string.switch_keyboard)
-                background = RippleDrawable(ColorStateList.valueOf(pressedColor),
-                    createRoundedDrawable(Color.TRANSPARENT, dpToPx(5).toFloat()), null)
-                addView(ImageView(context).apply {
-                    setImageDrawable(ContextCompat.getDrawable(context, R.drawable.ic_switch_keyboard))
-                    layoutParams = FrameLayout.LayoutParams(dpToPx(20), dpToPx(20), Gravity.CENTER)
-                })
-                setOnClickListener {
-                    it.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
-                    controller.onSwitchImeRequested()
-                }
-            }
-            row.addView(switch)
-        } else {
-            for (index in 0 until 3) {
-                val candidate = controller.suggestions.getOrNull(index)
-                row.addView(toolbarText(candidate.orEmpty(), G.SUGGESTION_FONT_SP).apply {
-                    isEnabled = candidate != null
-                    typeface = if (index == 0) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
-                    setTextColor(if (index == 0) Color.parseColor("#BFDBFE") else keyTextColor)
-                    if (candidate != null) setOnClickListener {
-                        it.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
-                        controller.applySuggestion(candidate)
-                    }
-                })
-                if (index < 2) addToolbarDivider(row)
+        val translate = toolbarText(context.getString(R.string.translate_action)).apply {
+            isEnabled = enabled
+            setTextColor(if (enabled) keyTextColor else keySubTextColor)
+            setOnClickListener {
+                it.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                controller.requestTranslationPicker()
             }
         }
+        row.addView(translate)
+        addToolbarDivider(row)
+        val switch = FrameLayout(context).apply {
+            layoutParams = LayoutParams(0, LayoutParams.MATCH_PARENT, 1f)
+            contentDescription = context.getString(R.string.switch_keyboard)
+            background = RippleDrawable(ColorStateList.valueOf(pressedColor),
+                createRoundedDrawable(Color.TRANSPARENT, dpToPx(5).toFloat()), null)
+            addView(ImageView(context).apply {
+                setImageDrawable(ContextCompat.getDrawable(context, R.drawable.ic_switch_keyboard))
+                layoutParams = FrameLayout.LayoutParams(dpToPx(20), dpToPx(20), Gravity.CENTER)
+            })
+            setOnClickListener {
+                it.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                controller.onSwitchImeRequested()
+            }
+        }
+        row.addView(switch)
         toolbarContainer.addView(row)
     }
 
@@ -227,6 +228,7 @@ class KeyboardLayoutView(
         // Header with title and close
         val header = LinearLayout(context).apply {
             orientation = HORIZONTAL
+            isMotionEventSplittingEnabled = true
             gravity = Gravity.CENTER_VERTICAL
             layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT)
         }
@@ -256,7 +258,8 @@ class KeyboardLayoutView(
 
         // Horizontal scrollable list of languages (last used language is first and highlighted)
         val lastLang = controller.consentManager.getLastTranslationLanguageCode()
-        val sortedLanguages = SupportedLanguages.getSortedWithPreferred(lastLang)
+        val sortedLanguages = SupportedLanguages.getSortedWithPreferred(lastLang,
+            controller.languagePreferences.translationLanguages)
 
         val scroll = HorizontalScrollView(context).apply {
             isHorizontalScrollBarEnabled = false
@@ -268,13 +271,23 @@ class KeyboardLayoutView(
 
         val langRow = LinearLayout(context).apply {
             orientation = HORIZONTAL
+            isMotionEventSplittingEnabled = true
             gravity = Gravity.CENTER_VERTICAL
         }
 
         for (lang in sortedLanguages) {
             val isPreferred = lang.languageCode.equals(lastLang, ignoreCase = true)
             val pill = TextView(context).apply {
-                text = lang.displayName
+                text = if (lang.secondaryName == null) lang.displayName else {
+                    val label = "${lang.displayName}\n${lang.secondaryName}"
+                    SpannableString(label).apply {
+                        val start = lang.displayName.length + 1
+                        setSpan(RelativeSizeSpan(0.8f), start, length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                        setSpan(ForegroundColorSpan(Color.parseColor("#CBD5E1")), start, length,
+                            Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                    }
+                }
+                gravity = Gravity.CENTER
                 textSize = 12.5f
                 setTextColor(Color.WHITE)
                 typeface = if (isPreferred) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
@@ -307,6 +320,7 @@ class KeyboardLayoutView(
     private fun renderProcessingToolbar(statusMessage: String) {
         val row = LinearLayout(context).apply {
             orientation = HORIZONTAL
+            isMotionEventSplittingEnabled = true
             gravity = Gravity.CENTER_VERTICAL
             val bg = createRoundedDrawable(Color.parseColor("#1E222B"), dpToPx(8).toFloat())
             background = bg
@@ -359,6 +373,7 @@ class KeyboardLayoutView(
         // Header: Title and Toggle
         val header = LinearLayout(context).apply {
             orientation = HORIZONTAL
+            isMotionEventSplittingEnabled = true
             gravity = Gravity.CENTER_VERTICAL
             layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT)
         }
@@ -406,6 +421,7 @@ class KeyboardLayoutView(
         // Actions Row
         val actionsRow = LinearLayout(context).apply {
             orientation = HORIZONTAL
+            isMotionEventSplittingEnabled = true
             gravity = Gravity.END
             layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT)
         }
@@ -476,6 +492,7 @@ class KeyboardLayoutView(
 
         val btnRow = LinearLayout(context).apply {
             orientation = HORIZONTAL
+            isMotionEventSplittingEnabled = true
             gravity = Gravity.END
             layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT)
         }
@@ -514,6 +531,7 @@ class KeyboardLayoutView(
     private fun renderErrorToolbar(message: String) {
         val row = LinearLayout(context).apply {
             orientation = HORIZONTAL
+            isMotionEventSplittingEnabled = true
             gravity = Gravity.CENTER_VERTICAL
             val bg = createRoundedDrawable(Color.parseColor("#341818"), dpToPx(8).toFloat(), Color.parseColor("#EF4444"), 1)
             background = bg
@@ -573,6 +591,7 @@ class KeyboardLayoutView(
         // Row 3: [Shift] z x c v b n m [Backspace]
         val r3 = LinearLayout(context).apply {
             orientation = HORIZONTAL
+            isMotionEventSplittingEnabled = true
             layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, dpToPx(G.KEY_HEIGHT_DP)).apply {
                 bottomMargin = dpToPx(G.KEY_VERTICAL_GAP_DP)
             }
@@ -609,6 +628,7 @@ class KeyboardLayoutView(
         // Row 4: [?123] [ , ] [ Espaço ] [ . ] [ Action Key ]
         val r4 = LinearLayout(context).apply {
             orientation = HORIZONTAL
+            isMotionEventSplittingEnabled = true
             layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, dpToPx(G.KEY_HEIGHT_DP))
         }
 
@@ -642,6 +662,7 @@ class KeyboardLayoutView(
         // Row 3: [=\<] ! " ' : ; / ? [Backspace]
         val r3 = LinearLayout(context).apply {
             orientation = HORIZONTAL
+            isMotionEventSplittingEnabled = true
             layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, dpToPx(G.KEY_HEIGHT_DP)).apply {
                 bottomMargin = dpToPx(G.KEY_VERTICAL_GAP_DP)
             }
@@ -666,6 +687,7 @@ class KeyboardLayoutView(
         // Row 4: [ABC] [ , ] [ Espaço ] [ . ] [ Action Key ]
         val r4 = LinearLayout(context).apply {
             orientation = HORIZONTAL
+            isMotionEventSplittingEnabled = true
             layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, dpToPx(G.KEY_HEIGHT_DP))
         }
 
@@ -698,6 +720,7 @@ class KeyboardLayoutView(
         // Row 3: [?123] % _ < > [ ] « » [Backspace]
         val r3 = LinearLayout(context).apply {
             orientation = HORIZONTAL
+            isMotionEventSplittingEnabled = true
             layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, dpToPx(G.KEY_HEIGHT_DP)).apply {
                 bottomMargin = dpToPx(G.KEY_VERTICAL_GAP_DP)
             }
@@ -722,6 +745,7 @@ class KeyboardLayoutView(
         // Row 4: [ABC] [ , ] [ Espaço ] [ . ] [ Action Key ]
         val r4 = LinearLayout(context).apply {
             orientation = HORIZONTAL
+            isMotionEventSplittingEnabled = true
             layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, dpToPx(G.KEY_HEIGHT_DP))
         }
 
@@ -756,6 +780,7 @@ class KeyboardLayoutView(
     private fun createKeyRow(chars: List<String>, inset: Boolean = false): LinearLayout {
         return LinearLayout(context).apply {
             orientation = HORIZONTAL
+            isMotionEventSplittingEnabled = true
             layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, dpToPx(G.KEY_HEIGHT_DP)).apply {
                 bottomMargin = dpToPx(G.KEY_VERTICAL_GAP_DP)
             }
@@ -773,6 +798,7 @@ class KeyboardLayoutView(
     ): LinearLayout {
         return LinearLayout(context).apply {
             orientation = HORIZONTAL
+            isMotionEventSplittingEnabled = true
             layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, dpToPx(height)).apply {
                 bottomMargin = dpToPx(G.KEY_VERTICAL_GAP_DP)
             }
@@ -806,6 +832,7 @@ class KeyboardLayoutView(
         }
         frame.addView(tv)
 
+        frame.tag = char
         val lowerChar = char.lowercase().firstOrNull() ?: ' '
         val accents = accentsMap[lowerChar]
 
@@ -823,12 +850,9 @@ class KeyboardLayoutView(
             }
             frame.addView(hint)
 
-            frame.setOnLongClickListener {
-                it.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
-                showAccentsPopup(it, accents, isShifted)
-                true
-            }
         }
+
+        installCharacterTouch(frame, char, accents.orEmpty())
 
         frame.setOnClickListener {
             it.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
@@ -858,6 +882,8 @@ class KeyboardLayoutView(
             layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT)
         }
         frame.addView(tv)
+
+        installCharacterTouch(frame, char, emptyList(), direct = true)
 
         frame.setOnClickListener {
             it.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
@@ -893,6 +919,7 @@ class KeyboardLayoutView(
             layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT)
         }
         frame.addView(tv)
+        if (label == "⇧" || label == "⇪") frame.tag = ShiftState::class.java
 
         frame.setOnClickListener {
             it.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
@@ -1031,64 +1058,176 @@ class KeyboardLayoutView(
     // -------------------------------------------------------------
     // ACCENTS POPUP
     // -------------------------------------------------------------
-    private fun showAccentsPopup(anchor: View, accents: List<String>, isShifted: Boolean) {
-        dismissPopup()
-
-        val popupView = LinearLayout(context).apply {
-            orientation = HORIZONTAL
-            val bg = createRoundedDrawable(Color.parseColor("#1B1F28"), dpToPx(8).toFloat(), Color.parseColor("#383E4C"), 1)
-            background = bg
-            setPadding(dpToPx(6), dpToPx(6), dpToPx(6), dpToPx(6))
+    private data class AccentStrip(
+        val popup: PopupWindow,
+        val cells: List<TextView>,
+        val screenLeft: Int,
+        val cellWidth: Int,
+        var selected: Int = 0
+    ) {
+        fun select(index: Int) {
+            selected = index.coerceIn(0, cells.lastIndex)
+            cells.forEachIndexed { i, cell ->
+                cell.setBackgroundColor(if (i == selected) Color.parseColor("#475569") else Color.TRANSPARENT)
+            }
         }
+    }
 
-        val popup = PopupWindow(
-            popupView,
-            ViewGroup.LayoutParams.WRAP_CONTENT,
-            ViewGroup.LayoutParams.WRAP_CONTENT,
-            true
-        )
-        activePopup = popup
+    private fun showAboveKey(anchor: View, content: View, width: Int, height: Int,
+        firstCellWidth: Int = width): Pair<PopupWindow, Int> {
+        val location = IntArray(2)
+        val rootLocation = IntArray(2)
+        val rootScreen = IntArray(2)
+        anchor.getLocationInWindow(location)
+        rootView.getLocationInWindow(rootLocation)
+        rootView.getLocationOnScreen(rootScreen)
+        val x = (location[0] + anchor.width / 2 - firstCellWidth / 2).coerceIn(
+            rootLocation[0], (rootLocation[0] + rootView.width - width).coerceAtLeast(rootLocation[0]))
+        val y = location[1] - height - dpToPx(G.ACCENT_GAP_DP)
+        val popup = PopupWindow(content, width, height, false).apply {
+            isTouchable = false
+            inputMethodMode = PopupWindow.INPUT_METHOD_NOT_NEEDED
+            isClippingEnabled = false
+        }
+        if (anchor.windowToken != null) popup.showAtLocation(rootView, Gravity.TOP or Gravity.LEFT, x, y)
+        return popup to (x + rootScreen[0] - rootLocation[0])
+    }
 
-        for (accent in accents) {
-            val displayAccent = if (isShifted) accent.uppercase() else accent.lowercase()
-            val item = TextView(context).apply {
-                text = displayAccent
-                textSize = 20f
-                setTextColor(Color.WHITE)
+    private data class KeyPreview(val container: ViewGroup, val label: TextView) {
+        fun dismiss() { container.overlay.remove(label) }
+    }
+
+    private fun showKeyPreview(anchor: View, char: String): KeyPreview {
+        val label = TextView(context).apply {
+            text = if (controller.shiftState != ShiftState.OFF) char.uppercase() else char.lowercase()
+            textSize = G.LETTER_FONT_SP
+            gravity = Gravity.CENTER
+            setTextColor(keyTextColor)
+            includeFontPadding = false
+            background = createRoundedDrawable(keyActionBgColor, dpToPx(G.KEY_CORNER_RADIUS_DP).toFloat())
+        }
+        val container = rootView as? ViewGroup ?: this
+        val anchorLocation = IntArray(2)
+        val containerLocation = IntArray(2)
+        anchor.getLocationOnScreen(anchorLocation)
+        container.getLocationOnScreen(containerLocation)
+        val width = anchor.width.coerceAtLeast(dpToPx(28))
+        val height = dpToPx(G.KEY_HEIGHT_DP)
+        val x = anchorLocation[0] - containerLocation[0]
+        val y = anchorLocation[1] - containerLocation[1] - height - dpToPx(G.ACCENT_GAP_DP)
+        label.measure(MeasureSpec.makeMeasureSpec(width, MeasureSpec.EXACTLY),
+            MeasureSpec.makeMeasureSpec(height, MeasureSpec.EXACTLY))
+        label.layout(x, y, x + width, y + height)
+        container.overlay.add(label)
+        return KeyPreview(container, label).also { keyPreviews.add(it) }
+    }
+
+    private fun showAccentsPopup(anchor: View, accents: List<String>): AccentStrip {
+        dismissPopup()
+        val row = LinearLayout(context).apply {
+            orientation = HORIZONTAL
+            isMotionEventSplittingEnabled = true
+            background = createRoundedDrawable(Color.parseColor("#1B1F28"), dpToPx(6).toFloat(),
+                Color.parseColor("#383E4C"), dpToPx(1))
+        }
+        val cellWidth = anchor.width.coerceAtLeast(dpToPx(28))
+            .coerceAtMost((rootView.width / accents.size).coerceAtLeast(dpToPx(28)))
+        val height = dpToPx(G.KEY_HEIGHT_DP)
+        val cells = accents.map { accent ->
+            TextView(context).apply {
+                text = if (controller.shiftState != ShiftState.OFF) accent.uppercase() else accent.lowercase()
+                textSize = G.LETTER_FONT_SP
+                includeFontPadding = false
+                setTextColor(keyTextColor)
                 gravity = Gravity.CENTER
-                val bg = createRoundedDrawable(Color.parseColor("#2B2F3A"), dpToPx(6).toFloat())
-                background = RippleDrawable(ColorStateList.valueOf(pressedColor), bg, null)
-                layoutParams = LayoutParams(dpToPx(42), dpToPx(42)).apply {
-                    val m = dpToPx(2)
-                    setMargins(m, 0, m, 0)
+                layoutParams = LayoutParams(cellWidth, height)
+                row.addView(this)
+            }
+        }
+        val (popup, screenLeft) = showAboveKey(anchor, row, cellWidth * accents.size, height, cellWidth)
+        activePopup = popup
+        return AccentStrip(popup, cells, screenLeft, cellWidth).apply { select(0) }
+    }
+
+    private fun installCharacterTouch(key: View, char: String, accents: List<String>, direct: Boolean = false) {
+        var pressed = false
+        var startX = 0f
+        var preview: KeyPreview? = null
+        var strip: AccentStrip? = null
+        val longPress = Runnable {
+            if (pressed && accents.isNotEmpty()) {
+                preview?.let { it.dismiss(); keyPreviews.remove(it) }
+                preview = null
+                key.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+                strip = showAccentsPopup(key, accents)
+            }
+        }
+        key.setOnTouchListener { view, event ->
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    pressed = true
+                    startX = event.rawX
+                    strip = null
+                    view.isPressed = true
+                    view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                    preview?.dismiss()
+                    preview = showKeyPreview(view, char)
+                    if (accents.isNotEmpty()) {
+                        pendingLongPresses.add(longPress)
+                        handler.postDelayed(longPress, android.view.ViewConfiguration.getLongPressTimeout().toLong())
+                    }
                 }
-                setOnClickListener {
-                    it.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
-                    controller.handleCharacter(accent)
-                    popup.dismiss()
+                MotionEvent.ACTION_MOVE -> {
+                    strip?.let { active ->
+                        if (kotlin.math.abs(event.rawX - startX) > android.view.ViewConfiguration.get(context).scaledTouchSlop) {
+                            active.select(((event.rawX - active.screenLeft) / active.cellWidth).toInt())
+                        }
+                    }
+                }
+                MotionEvent.ACTION_UP -> {
+                    handler.removeCallbacks(longPress)
+                    pendingLongPresses.remove(longPress)
+                    val active = strip
+                    pressed = false
+                    view.isPressed = false
+                    strip = null
+                    active?.popup?.dismiss()
+                    if (direct) controller.handleDirectCharacter(char)
+                    else controller.handleCharacter(if (active == null) char else accents[active.selected])
+                    val releasedPreview = preview
+                    preview = null
+                    handler.postDelayed({
+                        releasedPreview?.dismiss()
+                        keyPreviews.remove(releasedPreview)
+                    }, 60)
+                }
+                MotionEvent.ACTION_CANCEL -> {
+                    handler.removeCallbacks(longPress)
+                    pendingLongPresses.remove(longPress)
+                    pressed = false
+                    view.isPressed = false
+                    preview?.let { it.dismiss(); keyPreviews.remove(it) }
+                    preview = null
+                    strip?.popup?.dismiss()
+                    strip = null
                 }
             }
-            popupView.addView(item)
+            true
         }
-
-        popupView.measure(MeasureSpec.UNSPECIFIED, MeasureSpec.UNSPECIFIED)
-        val popupHeight = popupView.measuredHeight
-        val popupWidth = popupView.measuredWidth
-        val location = IntArray(2)
-        anchor.getLocationInWindow(location)
-        val rootLocation = IntArray(2)
-        rootView.getLocationInWindow(rootLocation)
-        val x = (location[0] + anchor.width / 2 - popupWidth / 2)
-            .coerceIn(rootLocation[0], (rootLocation[0] + rootView.width - popupWidth).coerceAtLeast(rootLocation[0]))
-        val y = (location[1] - popupHeight - dpToPx(G.ACCENT_GAP_DP)).coerceAtLeast(rootLocation[1])
-        popup.inputMethodMode = PopupWindow.INPUT_METHOD_NOT_NEEDED
-        popup.isClippingEnabled = false
-        popup.showAtLocation(rootView, Gravity.TOP or Gravity.LEFT, x, y)
     }
 
     fun dismissPopup() {
+        pendingLongPresses.forEach { handler.removeCallbacks(it) }
+        pendingLongPresses.clear()
+        keyPreviews.forEach { it.dismiss() }
+        keyPreviews.clear()
         activePopup?.dismiss()
         activePopup = null
+    }
+
+    override fun onDetachedFromWindow() {
+        dismissPopup()
+        super.onDetachedFromWindow()
     }
 
     private fun dpToPx(dp: Int): Int {

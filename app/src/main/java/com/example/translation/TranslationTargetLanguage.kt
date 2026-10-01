@@ -2,7 +2,8 @@ package com.example.translation
 
 data class TranslationTargetLanguage(
     val displayName: String,
-    val languageCode: String
+    val languageCode: String,
+    val secondaryName: String? = null
 )
 
 object SupportedLanguages {
@@ -13,17 +14,37 @@ object SupportedLanguages {
         TranslationTargetLanguage("Français", "fr"),
         TranslationTargetLanguage("Deutsch", "de"),
         TranslationTargetLanguage("Italiano", "it"),
-        TranslationTargetLanguage("中文", "zh-CN"),
-        TranslationTargetLanguage("日本語", "ja"),
-        TranslationTargetLanguage("한국어", "ko")
+        TranslationTargetLanguage("中文", "zh-CN", "Chinese (Simplified)"),
+        TranslationTargetLanguage("日本語", "ja", "Japanese"),
+        TranslationTargetLanguage("한국어", "ko", "Korean"),
+        TranslationTargetLanguage("繁體中文", "zh-TW", "Chinese (Traditional)"),
+        TranslationTargetLanguage("Arabic", "ar"),
+        TranslationTargetLanguage("Russian", "ru"),
+        TranslationTargetLanguage("Hindi", "hi"),
+        TranslationTargetLanguage("Dutch", "nl"),
+        TranslationTargetLanguage("Swedish", "sv"),
+        TranslationTargetLanguage("Norwegian", "no"),
+        TranslationTargetLanguage("Danish", "da"),
+        TranslationTargetLanguage("Finnish", "fi"),
+        TranslationTargetLanguage("Polish", "pl"),
+        TranslationTargetLanguage("Turkish", "tr"),
+        TranslationTargetLanguage("Greek", "el"),
+        TranslationTargetLanguage("Ukrainian", "uk"),
+        TranslationTargetLanguage("Hebrew", "he"),
+        TranslationTargetLanguage("Indonesian", "id"),
+        TranslationTargetLanguage("Thai", "th"),
+        TranslationTargetLanguage("Vietnamese", "vi")
     )
 
-    fun getSortedWithPreferred(preferredCode: String): List<TranslationTargetLanguage> {
-        val preferred = ALL.find { it.languageCode.equals(preferredCode, ignoreCase = true) }
+    val DEFAULT_CODES: Set<String> = setOf("en", "es", "pt", "fr", "de", "it", "zh-CN", "ja", "ko")
+
+    fun getSortedWithPreferred(preferredCode: String,
+        available: List<TranslationTargetLanguage> = ALL): List<TranslationTargetLanguage> {
+        val preferred = available.find { it.languageCode.equals(preferredCode, ignoreCase = true) }
         return if (preferred != null) {
-            listOf(preferred) + ALL.filter { it.languageCode != preferred.languageCode }
+            listOf(preferred) + available.filter { it.languageCode != preferred.languageCode }
         } else {
-            ALL
+            available
         }
     }
 

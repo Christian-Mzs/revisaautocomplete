@@ -290,6 +290,8 @@ fun SettingsScreen(
             }
 
             // Privacy Section
+            LanguageSettingsCard()
+
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(14.dp),

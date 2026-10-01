@@ -39,7 +39,6 @@ class KeyboardInputMethodService : android.inputmethodservice.InputMethodService
                 switchToNextIme()
             }
         )
-        keyboardController.loadDictionary()
     }
 
     override fun onCreateInputView(): View {
@@ -71,14 +70,6 @@ class KeyboardInputMethodService : android.inputmethodservice.InputMethodService
         Log.d(TAG, "onFinishInputView: finishingInput=$finishingInput")
         keyboardLayoutView?.dismissPopup()
         keyboardController.cancelAction()
-    }
-
-    override fun onUpdateSelection(
-        oldSelStart: Int, oldSelEnd: Int, newSelStart: Int, newSelEnd: Int,
-        candidatesStart: Int, candidatesEnd: Int
-    ) {
-        super.onUpdateSelection(oldSelStart, oldSelEnd, newSelStart, newSelEnd, candidatesStart, candidatesEnd)
-        if (::keyboardController.isInitialized) keyboardController.onCursorChanged()
     }
 
     override fun onEvaluateInputViewShown(): Boolean {

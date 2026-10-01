@@ -11,7 +11,7 @@ class CorrectionService(
     constructor(provider: TranslationProvider = GoogleGtxTranslationProvider()) :
             this(TranslationService(provider))
 
-    suspend fun correct(originalText: String): CorrectionResult {
+    suspend fun correct(originalText: String, outputLanguageCode: String = "pt"): CorrectionResult {
         val trimmed = originalText.trim()
         if (trimmed.isEmpty()) {
             return CorrectionResult(
@@ -45,11 +45,11 @@ class CorrectionService(
                 val englishText = step1Result.translatedText
                 val detectedLang = step1Result.detectedSourceLanguage
 
-                // Step 2: English -> Portuguese
-                val step2Result = translationService.translate(
+                // Step 2: English -> configured output language
+                val step2Result = if (outputLanguageCode == "en") step1Result else translationService.translate(
                     text = englishText,
                     sourceLanguage = "en",
-                    targetLanguage = "pt"
+                    targetLanguage = outputLanguageCode
                 )
 
                 val totalDuration = System.currentTimeMillis() - totalStartTime
