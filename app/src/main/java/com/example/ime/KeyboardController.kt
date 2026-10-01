@@ -47,6 +47,7 @@ class KeyboardController(
     val onSwitchImeRequested: () -> Unit = {}
 ) {
     val clipboardHistory = com.example.clipboard.ClipboardHistory(context)
+    val clipboardSuggestion = com.example.clipboard.ClipboardSuggestionController(context, coroutineScope, onStateChanged)
     val languagePreferences = LanguagePreferences(context)
 
     var currentMode: KeyboardMode = KeyboardMode.LETTERS
@@ -73,7 +74,14 @@ class KeyboardController(
         if (uiState !is TextActionUiState.Processing) {
             uiState = TextActionUiState.Idle
         }
+        clipboardSuggestion.updateEditor(ic, editorInfo, isSensitiveField)
         onStateChanged()
+    }
+
+    fun pasteClipboardSuggestion() {
+        if (!clipboardSuggestion.paste()) {
+            android.widget.Toast.makeText(context, "Não foi possível colar o conteúdo.", android.widget.Toast.LENGTH_SHORT).show()
+        }
     }
 
     fun handleCharacter(char: String) {

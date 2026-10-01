@@ -176,7 +176,7 @@ class KeyboardLayoutView(
     // TOOLBAR RENDERING (Corrigir | Traduzir | Switch IME)
     // -------------------------------------------------------------
     private fun renderToolbar() {
-        val snapshot = listOf(controller.uiState, controller.isSensitiveField)
+        val snapshot = listOf(controller.uiState, controller.isSensitiveField, controller.clipboardSuggestion.suggestion)
         if (snapshot == renderedToolbar) return
         renderedToolbar = snapshot
         toolbarContainer.removeAllViews()
@@ -192,6 +192,7 @@ class KeyboardLayoutView(
     }
 
     private fun renderIdleToolbar() {
+        controller.clipboardSuggestion.suggestion?.let { renderClipboardSuggestion(it); return }
         val row = LinearLayout(context).apply {
             orientation = HORIZONTAL
             isMotionEventSplittingEnabled = true
@@ -255,6 +256,50 @@ class KeyboardLayoutView(
             }
         })
         row.addView(switch)
+        toolbarContainer.addView(row)
+    }
+
+    private fun renderClipboardSuggestion(item: com.example.clipboard.ClipboardSuggestion) {
+        val row = LinearLayout(context).apply {
+            orientation = HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            layoutParams = FrameLayout.LayoutParams(LayoutParams.MATCH_PARENT, dpToPx(G.TOOLBAR_HEIGHT_DP))
+        }
+        val pill = LinearLayout(context).apply {
+            orientation = HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dpToPx(12), dpToPx(4), dpToPx(12), dpToPx(4))
+            layoutParams = LayoutParams(0, LayoutParams.MATCH_PARENT, 1f)
+            background = createRoundedDrawable(keyBgColor, dpToPx(18).toFloat())
+            contentDescription = "Colar conteúdo copiado"
+            setOnClickListener { controller.pasteClipboardSuggestion() }
+        }
+        pill.addView(ImageView(context).apply {
+            layoutParams = LayoutParams(dpToPx(32), dpToPx(32))
+            scaleType = ImageView.ScaleType.FIT_CENTER
+            if (item is com.example.clipboard.ClipboardSuggestion.Image && item.thumbnail != null) {
+                setImageBitmap(item.thumbnail)
+            } else {
+                setImageResource(if (item is com.example.clipboard.ClipboardSuggestion.Image)
+                    android.R.drawable.ic_menu_gallery else R.drawable.ic_clipboard)
+                setColorFilter(keyTextColor)
+            }
+        })
+        pill.addView(TextView(context).apply {
+            text = if (item is com.example.clipboard.ClipboardSuggestion.Text) item.text else "Colar imagem"
+            setTextColor(keyTextColor)
+            textSize = G.TOOL_FONT_SP
+            maxLines = 1
+            ellipsize = TextUtils.TruncateAt.END
+            setPadding(dpToPx(8), 0, 0, 0)
+            layoutParams = LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f)
+        })
+        row.addView(pill)
+        row.addView(toolbarText("×", 26f).apply {
+            layoutParams = LayoutParams(dpToPx(48), LayoutParams.MATCH_PARENT)
+            contentDescription = "Dispensar sugestão de clipboard"
+            setOnClickListener { controller.clipboardSuggestion.dismiss() }
+        })
         toolbarContainer.addView(row)
     }
 

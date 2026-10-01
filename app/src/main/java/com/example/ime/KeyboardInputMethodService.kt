@@ -22,6 +22,7 @@ class KeyboardInputMethodService : android.inputmethodservice.InputMethodService
     private var keyboardLayoutView: KeyboardLayoutView? = null
 
     private val clipboardListener = android.content.ClipboardManager.OnPrimaryClipChangedListener {
+        keyboardController.clipboardSuggestion.clipboardChanged()
         if (!keyboardController.isSensitiveField) {
             keyboardController.clipboardHistory.capture()
             keyboardLayoutView?.refreshClipboard()
@@ -84,6 +85,7 @@ class KeyboardInputMethodService : android.inputmethodservice.InputMethodService
         Log.d(TAG, "onFinishInputView: finishingInput=$finishingInput")
         keyboardLayoutView?.dismissPopup()
         InputMetrics.finishSession()
+        keyboardController.clipboardSuggestion.stop()
         keyboardController.cancelAction()
         keyboardController.setMode(KeyboardMode.LETTERS)
         keyboardLayoutView?.resetNavigation()
@@ -128,6 +130,7 @@ class KeyboardInputMethodService : android.inputmethodservice.InputMethodService
     override fun onDestroy() {
         super.onDestroy()
         Log.d(TAG, "onDestroy: IME service shutting down")
+        keyboardController.clipboardSuggestion.stop()
         keyboardController.clipboardHistory.stop(clipboardListener)
         serviceScope.cancel()
         keyboardLayoutView?.dismissPopup()

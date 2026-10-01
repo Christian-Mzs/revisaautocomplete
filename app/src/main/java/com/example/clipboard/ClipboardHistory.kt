@@ -30,6 +30,10 @@ class ClipboardHistory(context: Context) {
             val clip = clipboard.primaryClip ?: return
             val extras: PersistableBundle? = if (Build.VERSION.SDK_INT >= 24) clip.description.extras else null
             if (extras?.getBoolean("android.content.extra.IS_SENSITIVE", false) == true) return
+            if (clip.itemCount == 0 || clip.getItemAt(0).uri != null ||
+                (0 until clip.description.mimeTypeCount).any {
+                    clip.description.getMimeType(it).startsWith("image/")
+                }) return
             // Do not resolve URIs or load external content.
             clip.getItemAt(0).text?.toString()?.let(::add)
         }
