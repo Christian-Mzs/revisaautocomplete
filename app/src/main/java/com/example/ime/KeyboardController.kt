@@ -207,7 +207,7 @@ class KeyboardController(
             return
         }
 
-        val extracted = SentenceExtractor.extract(ic)
+        val extracted = TextExtractor.extract(ic)
         if (extracted == null || extracted.textToCorrect.isBlank()) {
             uiState = TextActionUiState.Error("Nenhum texto encontrado.")
             onStateChanged()
@@ -224,7 +224,7 @@ class KeyboardController(
                         title = "Correção",
                         originalText = extracted.textToCorrect,
                         resultText = result.correctedText,
-                        extractedSentence = extracted
+                        extractedRange = extracted
                     )
                 } else {
                     val errMsg = result.errorMessage ?: "Não foi possível corrigir agora."
@@ -278,7 +278,7 @@ class KeyboardController(
             return
         }
 
-        val extracted = SentenceExtractor.extract(ic)
+        val extracted = TextExtractor.extract(ic)
         if (extracted == null || extracted.textToCorrect.isBlank()) {
             uiState = TextActionUiState.Error("Nenhum texto encontrado.")
             onStateChanged()
@@ -301,7 +301,7 @@ class KeyboardController(
                             title = "Tradução · $langName",
                             originalText = extracted.textToCorrect,
                             resultText = result.translatedText,
-                            extractedSentence = extracted
+                            extractedRange = extracted
                         )
                     }
                     is TranslationResult.Error -> {
@@ -337,12 +337,14 @@ class KeyboardController(
 
     fun applyResult() {
         val state = uiState as? TextActionUiState.Preview ?: return
-        TextReplacementController.replace(
+        if (isSensitiveField) return
+        val replaced = TextReplacementController.replace(
             inputConnection = inputConnection,
-            extractedSentence = state.extractedSentence,
+            extractedRange = state.extractedRange,
             correctedText = state.resultText
         )
-        uiState = TextActionUiState.Idle
+        uiState = if (replaced) TextActionUiState.Idle
+            else TextActionUiState.Error("O texto mudou ou o editor recusou a substituição.")
         onStateChanged()
     }
 

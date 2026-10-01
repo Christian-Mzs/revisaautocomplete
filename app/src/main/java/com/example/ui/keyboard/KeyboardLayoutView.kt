@@ -198,16 +198,16 @@ class KeyboardLayoutView(
             gravity = Gravity.CENTER_VERTICAL
             layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, dpToPx(G.TOOLBAR_HEIGHT_DP))
         }
-        row.addView(toolbarText("☺", G.SPECIAL_FONT_SP).apply {
+        row.addView(toolbarIcon(R.drawable.ic_toolbar_emoji, context.getString(R.string.open_emojis)).apply {
             layoutParams = LayoutParams(dpToPx(42), LayoutParams.MATCH_PARENT)
             contentDescription = context.getString(R.string.open_emojis)
             setOnClickListener { clipboardOpen = false; controller.setMode(KeyboardMode.EMOJIS); renderKeys() }
         })
         addToolbarDivider(row)
         val enabled = !controller.isSensitiveField
-        val correct = toolbarText(context.getString(R.string.correct_action)).apply {
+        val correct = toolbarIcon(R.drawable.ic_toolbar_correct, context.getString(R.string.correct_action)).apply {
             isEnabled = enabled
-            setTextColor(if (enabled) keyTextColor else keySubTextColor)
+            setColorFilter(if (enabled) keyTextColor else keySubTextColor)
             setOnClickListener {
                 it.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
                 controller.requestCorrection()
@@ -215,9 +215,9 @@ class KeyboardLayoutView(
         }
         row.addView(correct)
         addToolbarDivider(row)
-        val translate = toolbarText(context.getString(R.string.translate_action)).apply {
+        val translate = toolbarIcon(R.drawable.ic_toolbar_translate, context.getString(R.string.translate_action)).apply {
             isEnabled = enabled
-            setTextColor(if (enabled) keyTextColor else keySubTextColor)
+            setColorFilter(if (enabled) keyTextColor else keySubTextColor)
             setOnClickListener {
                 it.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
                 controller.requestTranslationPicker()
@@ -256,6 +256,17 @@ class KeyboardLayoutView(
         })
         row.addView(switch)
         toolbarContainer.addView(row)
+    }
+
+    private fun toolbarIcon(drawable: Int, label: String): ImageView = ImageView(context).apply {
+        contentDescription = label
+        setImageDrawable(ContextCompat.getDrawable(context, drawable))
+        setColorFilter(keyTextColor)
+        scaleType = ImageView.ScaleType.CENTER_INSIDE
+        setPadding(dpToPx(10), dpToPx(10), dpToPx(10), dpToPx(10))
+        layoutParams = LayoutParams(0, LayoutParams.MATCH_PARENT, 1f)
+        background = RippleDrawable(ColorStateList.valueOf(pressedColor),
+            createRoundedDrawable(Color.TRANSPARENT, dpToPx(5).toFloat()), null)
     }
 
     private fun toolbarText(label: String, fontSize: Float = G.TOOL_FONT_SP): TextView = TextView(context).apply {

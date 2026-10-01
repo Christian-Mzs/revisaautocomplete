@@ -18,7 +18,7 @@ sealed class TextActionUiState {
         val title: String,
         val originalText: String,
         val resultText: String,
-        val extractedSentence: ExtractedSentence,
+        val extractedRange: ExtractedTextRange,
         var isShowingOriginal: Boolean = false
     ) : TextActionUiState()
 

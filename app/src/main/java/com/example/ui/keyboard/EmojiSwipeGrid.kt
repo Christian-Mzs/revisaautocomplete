@@ -25,7 +25,7 @@ internal class EmojiSwipeGrid(context: Context, private val changeCategory: (Int
                 val dy = event.y - startY
                 if (abs(dx) > threshold && abs(dx) > abs(dy) * 1.5f) {
                     swiping = true
-                    parent.requestDisallowInterceptTouchEvent(true)
+                    parent?.requestDisallowInterceptTouchEvent(true)
                     return true
                 }
             }
@@ -34,14 +34,30 @@ internal class EmojiSwipeGrid(context: Context, private val changeCategory: (Int
     }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
-        if (!swiping) return super.onTouchEvent(event)
+        if (event.actionMasked == MotionEvent.ACTION_DOWN) {
+            startX = event.x
+            startY = event.y
+            swiping = false
+            super.onTouchEvent(event)
+            // Empty Recentes has no children: own DOWN so later MOVE/UP still arrive.
+            return true
+        }
+        if (!swiping && event.actionMasked == MotionEvent.ACTION_MOVE) {
+            val dx = event.x - startX
+            val dy = event.y - startY
+            if (abs(dx) > threshold && abs(dx) > abs(dy) * 1.5f) {
+                swiping = true
+                parent?.requestDisallowInterceptTouchEvent(true)
+            }
+        }
+        if (!swiping) { super.onTouchEvent(event); return true }
         if (event.actionMasked == MotionEvent.ACTION_UP) {
             swiping = false
-            parent.requestDisallowInterceptTouchEvent(false)
+            parent?.requestDisallowInterceptTouchEvent(false)
             if (abs(event.x - startX) > threshold) changeCategory(if (event.x < startX) 1 else -1)
         } else if (event.actionMasked == MotionEvent.ACTION_CANCEL) {
             swiping = false
-            parent.requestDisallowInterceptTouchEvent(false)
+            parent?.requestDisallowInterceptTouchEvent(false)
         }
         return true
     }

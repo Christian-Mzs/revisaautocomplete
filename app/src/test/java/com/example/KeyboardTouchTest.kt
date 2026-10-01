@@ -158,9 +158,9 @@ class KeyboardTouchTest {
         val ic = FakeInputConnection()
         val (_, view) = keyboard(ic)
         val toolbar = (view.getChildAt(0) as FrameLayout).getChildAt(0) as LinearLayout
-        val labels = (0 until toolbar.childCount).map { toolbar.getChildAt(it) }.filterIsInstance<TextView>().filter { it.contentDescription == null }
-        assertEquals(listOf(context.getString(R.string.correct_action), context.getString(R.string.translate_action)),
-            labels.map { it.text.toString() })
+        val labels = (0 until toolbar.childCount).map { toolbar.getChildAt(it).contentDescription?.toString() }
+        assertTrue(labels.contains(context.getString(R.string.correct_action)))
+        assertTrue(labels.contains(context.getString(R.string.translate_action)))
         val key = keys(view).first { it.tag == "t" }
         touch(key, MotionEvent.ACTION_DOWN)
         touch(key, MotionEvent.ACTION_UP)
