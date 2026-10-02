@@ -23,6 +23,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -75,7 +76,11 @@ internal fun OnboardingScreen(enabled: Boolean, selected: Boolean, replay: Boole
     Box(Modifier.fillMaxSize().background(Color(0xFF0A0C10)), contentAlignment = Alignment.TopCenter) {
         BoxWithConstraints(Modifier.widthIn(max = 480.dp).fillMaxSize()
             .background(Brush.verticalGradient(listOf(RevisaColors.Onboarding, Color(0xFF0D0F13))))
-            .safeDrawingPadding()) {
+            .drawWithCache {
+                val glow = Brush.radialGradient(listOf(RevisaColors.Blue.copy(alpha = .15f), Color.Transparent),
+                    center = Offset(50.dp.toPx(), 10.dp.toPx()), radius = 112.dp.toPx())
+                onDrawBehind { drawRect(glow) }
+            }.safeDrawingPadding()) {
             val compact = maxHeight < 760.dp
             Column(Modifier.fillMaxSize()) {
                 Column(Modifier.padding(start = 22.dp, end = 22.dp, top = 18.dp)) {

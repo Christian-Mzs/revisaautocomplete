@@ -23,6 +23,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -39,9 +41,9 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.R
 
 @Composable
-fun SettingsScreen(isImeEnabled: Boolean, isImeSelected: Boolean, onRefreshImeStatus: () -> Unit) {
+fun SettingsScreen(isImeEnabled: Boolean, isImeSelected: Boolean, onRefreshImeStatus: () -> Unit,
+    account: CodexAccountViewModel = viewModel()) {
     val context = LocalContext.current
-    val account: CodexAccountViewModel = viewModel()
     val preferences = remember { OnboardingPreferences(context) }
     val languages = remember { LanguagePreferences(context) }
     var showOnboarding by rememberSaveable { mutableStateOf(!preferences.completed) }
@@ -104,8 +106,12 @@ internal fun RevisaMenuScreen(
         Box(Modifier.widthIn(max = 460.dp).fillMaxSize().background(RevisaColors.Background)
             .drawWithCache {
                 val light = Brush.radialGradient(listOf(Color(0xFF1C3358), Color.Transparent),
-                    center = Offset.Zero, radius = size.height * .6f)
-                onDrawBehind { drawRect(light) }
+                    center = Offset.Zero, radius = size.height * .6364f)
+                onDrawBehind {
+                    withTransform({ scale(size.width / size.height, 1f, Offset.Zero) }) {
+                        drawRect(light, size = Size(size.height, size.height))
+                    }
+                }
             }.safeDrawingPadding()) {
             Column(Modifier.fillMaxSize()) {
                 Column(Modifier.weight(1f).verticalScroll(rememberScrollState())
@@ -182,7 +188,7 @@ internal fun BackLink(onClick: () -> Unit) {
 @Composable
 private fun GroupHeading(text: String) {
     Spacer(Modifier.height(25.dp))
-    androidx.compose.material3.Text(text.uppercase(), color = Color.White, fontSize = 11.sp, letterSpacing = 1.sp)
+    androidx.compose.material3.Text(text.uppercase(), color = Color.White, fontSize = 11.sp, lineHeight = 13.sp, letterSpacing = 1.sp)
     Spacer(Modifier.height(18.dp))
 }
 

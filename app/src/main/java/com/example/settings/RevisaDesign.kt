@@ -19,12 +19,25 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.Font
+import com.example.R
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+
+// The supplied HTML resolves system-ui to DejaVu Sans in its rendered reference.
+// Bundle it for consistent layout across Android vendors; this theme is app UI only.
+internal val RevisaFont = FontFamily(
+    Font(R.font.revisa_reference_regular, FontWeight.Normal),
+    Font(R.font.revisa_reference_regular, FontWeight.Medium),
+    Font(R.font.revisa_reference_bold, FontWeight.SemiBold),
+    Font(R.font.revisa_reference_bold, FontWeight.Bold),
+    Font(R.font.revisa_reference_bold, FontWeight.ExtraBold),
+    Font(R.font.revisa_reference_bold, FontWeight.Black)
+)
 
 internal object RevisaColors {
     val Blue = Color(0xFF1768FF)
@@ -47,7 +60,7 @@ internal fun RevisaTheme(content: @Composable () -> Unit) {
             background = RevisaColors.Background, surface = RevisaColors.Surface,
             onSurface = RevisaColors.Text, onBackground = RevisaColors.Text),
         typography = Typography(bodyLarge = androidx.compose.ui.text.TextStyle(
-            fontFamily = FontFamily.SansSerif, fontSize = 15.sp, lineHeight = 23.sp)),
+            fontFamily = RevisaFont, fontSize = 15.sp, lineHeight = 23.sp)),
         content = content
     )
 }
@@ -57,14 +70,14 @@ internal fun Copy(text: String, modifier: Modifier = Modifier, size: TextUnit = 
     color: Color = RevisaColors.Text, weight: FontWeight = FontWeight.Normal,
     lineHeight: TextUnit = (size.value * 1.55f).sp, align: TextAlign? = null) {
     Text(text, modifier, color = color, fontSize = size, fontWeight = weight,
-        fontFamily = FontFamily.SansSerif, lineHeight = lineHeight, textAlign = align)
+        fontFamily = RevisaFont, lineHeight = lineHeight, textAlign = align)
 }
 
 @Composable
 internal fun Heading(text: String, size: TextUnit = 34.sp, centered: Boolean = false,
     color: Color = RevisaColors.Text, modifier: Modifier = Modifier) {
     Text(text, modifier, color = color, fontSize = size, fontWeight = FontWeight.ExtraBold,
-        lineHeight = (size.value * 1.12f).sp, letterSpacing = (-size.value * 0.034f).sp,
+        fontFamily = RevisaFont, lineHeight = (size.value * if (size.value <= 21f) 1.2f else 1.12f).sp, letterSpacing = (if (size.value <= 21f) -.4f else -size.value * .034f).sp,
         textAlign = if (centered) TextAlign.Center else TextAlign.Start)
 }
 
@@ -119,8 +132,8 @@ internal fun MenuRow(title: String, subtitle: String? = null, modifier: Modifier
         .padding(vertical = 18.dp), verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(15.dp)) {
         Column(Modifier.weight(1f)) {
-            Copy(title, weight = FontWeight.Bold, color = RevisaColors.Text.copy(alpha = if (enabled) 1f else .45f))
-            if (subtitle != null) { Spacer(Modifier.height(5.dp)); Copy(subtitle, size = 12.sp, color = RevisaColors.Muted) }
+            Copy(title, weight = FontWeight.Bold, lineHeight = 18.sp, color = RevisaColors.Text.copy(alpha = if (enabled) 1f else .45f))
+            if (subtitle != null) { Spacer(Modifier.height(5.dp)); Copy(subtitle, size = 12.sp, lineHeight = 14.4.sp, color = RevisaColors.Muted) }
         }
         Copy("›", size = 24.sp, color = Color(0xFF96BCFF))
     }

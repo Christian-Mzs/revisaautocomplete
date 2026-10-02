@@ -30,6 +30,7 @@ class RevisaScreensTest {
             { settingsOpened++ }, { pickerOpened++ }, { finishes++ }, {}) } }
         primary(); primary(); primary()
         compose.onNodeWithText("Ative o Revisa").assertExists()
+        capture("onboarding-2")
         primary()
         assertEquals(1, settingsOpened)
         compose.onNodeWithText("Etapa concluída").assertDoesNotExist()
@@ -37,6 +38,7 @@ class RevisaScreensTest {
         compose.onNodeWithText("Etapa concluída").assertExists()
         primary(); primary()
         assertEquals(1, pickerOpened)
+        capture("onboarding-3")
         compose.onNodeWithText("Revisa selecionado").assertDoesNotExist()
         compose.runOnIdle { selected = true }
         compose.onNodeWithText("Revisa selecionado").assertExists()
@@ -46,6 +48,35 @@ class RevisaScreensTest {
         compose.onNodeWithText("Can we talk tomorrow after lunch?").assertExists()
         primary(); primary()
         assertEquals(1, finishes)
+    }
+
+    @Test fun `first opening finishes and replay preserves persistent settings`() {
+        val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.app.Application>()
+        context.getSharedPreferences("revisa_presentation", android.content.Context.MODE_PRIVATE).edit().clear().commit()
+        val languages = LanguagePreferences(context)
+        val previous = languages.translationLanguages
+        val account = CodexAccountViewModel(context, PreviewAccount())
+        compose.setContent { SettingsScreen(true, true, {}, account) }
+        compose.onNodeWithText("Olá, eu sou o Revisa.").assertExists()
+        repeat(10) { primary() }
+        compose.onNodeWithText("✓ Revisa pronto").assertExists()
+        assertTrue(OnboardingPreferences(context).completed)
+        compose.onNodeWithContentDescription("Configurações").performClick()
+        compose.onNodeWithText("Repetir apresentação").performClick()
+        compose.onNodeWithText("Olá, eu sou o Revisa.").assertExists()
+        compose.onNodeWithText("‹ Voltar").performClick()
+        compose.onNodeWithText("Repetir apresentação").assertExists()
+        assertTrue(OnboardingPreferences(context).completed)
+        assertEquals(previous, LanguagePreferences(context).translationLanguages)
+    }
+
+    @Test fun `completed presentation opens home on a fresh composition`() {
+        val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.app.Application>()
+        OnboardingPreferences(context).complete()
+        val account = CodexAccountViewModel(context, PreviewAccount())
+        compose.setContent { SettingsScreen(true, true, {}, account) }
+        compose.onNodeWithText("✓ Revisa pronto").assertExists()
+        compose.onNodeWithText("Olá, eu sou o Revisa.").assertDoesNotExist()
     }
 
     @Test fun `replaying presentation can exit without changing completion`() {
@@ -149,4 +180,11 @@ private fun MenuFixture(page: String = "home", enabled: Boolean = true, selected
     login: () -> Unit = {}, browser: () -> Unit = {}, cancel: () -> Unit = {},
     language: (String, Boolean) -> Boolean = { _, _ -> true }) {
     RevisaMenuScreen(page, enabled, selected, state, codes, {}, {}, {}, {}, {}, language, login, cancel, {}, browser)
+}
+
+private class PreviewAccount : AccountBackend {
+    override suspend fun prepare() = Unit
+    override suspend fun status() = com.example.codex.LoginState(false)
+    override suspend fun login(onLine: (String) -> Unit) = Unit
+    override suspend fun logout() = com.example.codex.LoginState(false)
 }
