@@ -10,7 +10,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -102,6 +102,7 @@ internal fun RevisaMenuScreen(
     onLanguage: (String, Boolean) -> Boolean, onLogin: () -> Unit, onCancel: () -> Unit,
     onLogout: () -> Unit, onBrowser: () -> Unit
 ) {
+    val scroll = remember(page) { ScrollState(0) }
     Box(Modifier.fillMaxSize().background(Color(0xFF090C12)), contentAlignment = Alignment.TopCenter) {
         Box(Modifier.widthIn(max = 460.dp).fillMaxSize().background(RevisaColors.Background)
             .drawWithCache {
@@ -114,7 +115,7 @@ internal fun RevisaMenuScreen(
                 }
             }.safeDrawingPadding()) {
             Column(Modifier.fillMaxSize()) {
-                Column(Modifier.weight(1f).verticalScroll(rememberScrollState())
+                Column(Modifier.weight(1f).verticalScroll(scroll)
                     .padding(start = 24.dp, end = 24.dp, top = 28.dp, bottom = if (page == "languages") 0.dp else 36.dp)) {
                     Row(Modifier.fillMaxWidth().heightIn(min = 44.dp), verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween) {

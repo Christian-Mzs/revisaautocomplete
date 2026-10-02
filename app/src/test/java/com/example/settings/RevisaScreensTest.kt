@@ -122,6 +122,15 @@ class RevisaScreensTest {
         assertEquals(setOf("en", "es"), LanguagePreferences(context).translationLanguages.map { it.languageCode }.toSet())
     }
 
+    @Test fun `opening another page resets the previous language scroll position`() {
+        var page by mutableStateOf("languages")
+        compose.setContent { RevisaTheme { MenuFixture(page = page) } }
+        compose.onNodeWithText("Vietnamita").performScrollTo()
+        compose.runOnIdle { page = "home" }
+        compose.onNodeWithContentDescription("Configurações").assertIsDisplayed()
+        compose.onNodeWithText("✓ Revisa pronto").assertIsDisplayed()
+    }
+
     @Test fun `render reference screens for visual review`() {
         var page by mutableStateOf("home")
         var ready by mutableStateOf(false)
