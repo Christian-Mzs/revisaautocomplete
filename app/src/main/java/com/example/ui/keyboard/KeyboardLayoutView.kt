@@ -199,6 +199,7 @@ class KeyboardLayoutView(
             is TextActionUiState.Preview -> renderPreviewToolbar(state)
             is TextActionUiState.ConsentRequired -> renderConsentToolbar(state.pendingAction)
             is TextActionUiState.Error -> renderErrorToolbar(state.message)
+            is TextActionUiState.LoginRequired -> renderErrorToolbar("Entre com ChatGPT para usar este recurso.", true)
         }
     }
 
@@ -646,7 +647,7 @@ class KeyboardLayoutView(
         toolbarContainer.addView(card)
     }
 
-    private fun renderErrorToolbar(message: String) {
+    private fun renderErrorToolbar(message: String, loginRequired: Boolean = false) {
         val row = LinearLayout(context).apply {
             orientation = HORIZONTAL
             isMotionEventSplittingEnabled = true
@@ -665,6 +666,15 @@ class KeyboardLayoutView(
         }
         row.addView(errorText)
 
+        if (loginRequired) {
+            row.addView(TextView(context).apply {
+                text = "Entrar"
+                setTextColor(Color.WHITE)
+                textSize = 12f
+                setPadding(dpToPx(8), dpToPx(4), dpToPx(8), dpToPx(4))
+                setOnClickListener { controller.openChatGptSettings() }
+            })
+        }
         val closeBtn = TextView(context).apply {
             text = context.getString(R.string.close)
             setTextColor(Color.WHITE)

@@ -7,6 +7,8 @@ sealed class TextActionUiState {
 
     data class ConsentRequired(val pendingAction: PendingAction) : TextActionUiState()
 
+    object LoginRequired : TextActionUiState()
+
     object SelectingLanguage : TextActionUiState()
 
     data class Processing(

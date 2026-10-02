@@ -290,6 +290,7 @@ fun SettingsScreen(
             }
 
             // Privacy Section
+            CodexAccountCard()
             LanguageSettingsCard()
 
             Card(
@@ -320,7 +321,7 @@ fun SettingsScreen(
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = "O texto só é enviado ao serviço de tradução quando você toca em Corrigir ou Traduzir.\n\nEm campos de senha identificados pelo Android, essas funções são desativadas e o conteúdo não é enviado ao serviço de tradução.",
+                            text = "O texto só é enviado ao Codex/OpenAI quando você toca em Corrigir ou Traduzir.\n\nEm campos de senha identificados pelo Android, essas funções são desativadas e o conteúdo não é enviado ao Codex/OpenAI.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             lineHeight = 18.sp

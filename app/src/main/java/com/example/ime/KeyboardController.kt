@@ -3,16 +3,15 @@ package com.example.ime
 import android.content.Context
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputConnection
-import com.example.correction.CorrectionService
+import com.example.codex.*
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.ensureActive
 import com.example.privacy.SensitiveFieldDetector
 import com.example.privacy.TranslationConsentManager
 import com.example.settings.LanguagePreferences
 import com.example.translation.SupportedLanguages
-import com.example.translation.TranslationResult
-import com.example.translation.TranslationService
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import kotlinx.coroutines.launch
 
 enum class KeyboardMode {
@@ -40,12 +39,13 @@ enum class ActionKeyType {
 class KeyboardController(
     private val context: Context,
     private val coroutineScope: CoroutineScope,
-    private val translationService: TranslationService = TranslationService(),
-    private val correctionService: CorrectionService = CorrectionService(translationService),
+    private val textEngine: CodexTextEngine? = null,
     val consentManager: TranslationConsentManager = TranslationConsentManager.getInstance(context),
     private val onStateChanged: () -> Unit,
     val onSwitchImeRequested: () -> Unit = {}
 ) {
+    private val engine: CodexTextEngine by lazy { textEngine ?: CodexRuntime.getInstance(context) }
+
     val clipboardHistory = com.example.clipboard.ClipboardHistory(context)
     val clipboardSuggestion = com.example.clipboard.ClipboardSuggestionController(context, onStateChanged)
     val languagePreferences = LanguagePreferences(context)
@@ -69,6 +69,7 @@ class KeyboardController(
         get() = SensitiveFieldDetector.isSensitive(currentEditorInfo)
 
     fun updateInputConnection(ic: InputConnection?, editorInfo: EditorInfo?) {
+        if (inputConnection !== ic || currentEditorInfo !== editorInfo) cancelAction()
         this.inputConnection = ic
         this.currentEditorInfo = editorInfo
         if (uiState !is TextActionUiState.Processing) {
@@ -189,6 +190,7 @@ class KeyboardController(
     // CORRECTION FLOW
     // -------------------------------------------------------------
     fun requestCorrection() {
+        if (uiState is TextActionUiState.Processing) return
         // SECURITY CHECK: Block before reading any text or calling network
         if (isSensitiveField) {
             uiState = TextActionUiState.Error("Desativado em campos de senha.")
@@ -206,50 +208,59 @@ class KeyboardController(
     }
 
     private fun executeCorrection() {
-        if (isSensitiveField) return
+        startTextAction(TextOperation(), "Correção", "Corrigindo…")
+    }
 
-        val ic = inputConnection
-        if (ic == null) {
+    private fun startTextAction(operation: TextOperation, title: String, processing: String) {
+        if (isSensitiveField || uiState is TextActionUiState.Processing) return
+        val ic = inputConnection ?: run {
             uiState = TextActionUiState.Error("Não foi possível acessar o texto.")
-            onStateChanged()
-            return
+            onStateChanged(); return
         }
-
-        val extracted = TextExtractor.extract(ic)
-        if (extracted == null || extracted.textToCorrect.isBlank()) {
-            uiState = TextActionUiState.Error("Nenhum texto encontrado.")
-            onStateChanged()
-            return
-        }
-
-        val job = coroutineScope.launch {
-            val result = correctionService.correct(extracted.textToCorrect,
-                languagePreferences.correctionOutputLanguageCode)
-
-            withContext(Dispatchers.Main) {
-                if (result.isSuccess && !result.correctedText.isNullOrBlank()) {
-                    uiState = TextActionUiState.Preview(
-                        title = "Correção",
-                        originalText = extracted.textToCorrect,
-                        resultText = result.correctedText,
-                        extractedRange = extracted
-                    )
-                } else {
-                    val errMsg = result.errorMessage ?: "Não foi possível corrigir agora."
-                    uiState = TextActionUiState.Error(errMsg)
+        val editor = currentEditorInfo
+        val job = coroutineScope.launch(start=CoroutineStart.LAZY) {
+            try {
+                engine.ensureRuntimeReady()
+                ensureActive()
+                if (isSensitiveField || inputConnection !== ic || currentEditorInfo !== editor) return@launch
+                if (!engine.loginStatus().connected) {
+                    uiState = TextActionUiState.LoginRequired
+                    onStateChanged(); return@launch
                 }
+                ensureActive()
+                if (isSensitiveField || inputConnection !== ic || currentEditorInfo !== editor) return@launch
+                val extracted = TextExtractor.extract(ic)
+                if (extracted == null || extracted.textToCorrect.isBlank()) {
+                    uiState = TextActionUiState.Error("Nenhum texto encontrado.")
+                    onStateChanged(); return@launch
+                }
+                uiState = TextActionUiState.Processing(processing, coroutineContext[kotlinx.coroutines.Job]!!)
+                onStateChanged()
+                val result = engine.processText(extracted.textToCorrect, operation)
+                ensureActive()
+                if (isSensitiveField || inputConnection !== ic || currentEditorInfo !== editor) return@launch
+                uiState = TextActionUiState.Preview(title, extracted.textToCorrect, result, extracted)
+                onStateChanged()
+            } catch (e: CancellationException) { throw e }
+            catch (e: Exception) {
+                uiState = TextActionUiState.Error(e.message ?: "Não foi possível processar com Codex.")
                 onStateChanged()
             }
         }
+        uiState = TextActionUiState.Processing("Preparando…", job)
+        onStateChanged(); job.start()
+    }
 
-        uiState = TextActionUiState.Processing("Corrigindo…", job)
-        onStateChanged()
+    fun openChatGptSettings() {
+        context.startActivity(android.content.Intent(context, com.example.MainActivity::class.java)
+            .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
     }
 
     // -------------------------------------------------------------
     // TRANSLATION FLOW
     // -------------------------------------------------------------
     fun requestTranslationPicker() {
+        if (uiState is TextActionUiState.Processing) return
         // SECURITY CHECK: Block before reading any text or calling network
         if (isSensitiveField) {
             uiState = TextActionUiState.Error("Desativado em campos de senha.")
@@ -271,7 +282,11 @@ class KeyboardController(
 
     fun selectLanguageAndTranslate(targetLanguageCode: String) {
         // SECURITY CHECK
-        if (isSensitiveField) return
+        if (isSensitiveField || uiState is TextActionUiState.Processing) return
+        if (!consentManager.hasAcceptedConsent()) {
+            uiState = TextActionUiState.ConsentRequired(TextActionUiState.PendingAction.Translation(targetLanguageCode))
+            onStateChanged(); return
+        }
         if (languagePreferences.translationLanguages.none { it.languageCode == targetLanguageCode }) {
             requestTranslationPicker()
             return
@@ -279,55 +294,16 @@ class KeyboardController(
 
         consentManager.setLastTranslationLanguageCode(targetLanguageCode)
 
-        val ic = inputConnection
-        if (ic == null) {
-            uiState = TextActionUiState.Error("Não foi possível acessar o texto.")
-            onStateChanged()
-            return
-        }
-
-        val extracted = TextExtractor.extract(ic)
-        if (extracted == null || extracted.textToCorrect.isBlank()) {
-            uiState = TextActionUiState.Error("Nenhum texto encontrado.")
-            onStateChanged()
-            return
-        }
-
-        val langName = SupportedLanguages.find(targetLanguageCode)?.displayName ?: targetLanguageCode
-
-        val job = coroutineScope.launch {
-            val result = translationService.translate(
-                text = extracted.textToCorrect,
-                sourceLanguage = "auto",
-                targetLanguage = targetLanguageCode
-            )
-
-            withContext(Dispatchers.Main) {
-                when (result) {
-                    is TranslationResult.Success -> {
-                        uiState = TextActionUiState.Preview(
-                            title = "Tradução · $langName",
-                            originalText = extracted.textToCorrect,
-                            resultText = result.translatedText,
-                            extractedRange = extracted
-                        )
-                    }
-                    is TranslationResult.Error -> {
-                        uiState = TextActionUiState.Error(result.errorMessage)
-                    }
-                }
-                onStateChanged()
-            }
-        }
-
-        uiState = TextActionUiState.Processing("Traduzindo para $langName…", job)
-        onStateChanged()
+        val language = SupportedLanguages.find(targetLanguageCode) ?: return
+        startTextAction(TextOperation(TextMode.TRANSLATION, language),
+            "Tradução · ${language.displayName}", "Traduzindo para ${language.displayName}…")
     }
 
     // -------------------------------------------------------------
     // SHARED ACTIONS
     // -------------------------------------------------------------
     fun acceptConsentAndProceed(pendingAction: TextActionUiState.PendingAction) {
+        if (isSensitiveField) return
         consentManager.setConsentAccepted(true)
         when (pendingAction) {
             is TextActionUiState.PendingAction.Correction -> executeCorrection()

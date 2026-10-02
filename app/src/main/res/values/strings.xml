@@ -30,7 +30,7 @@
 
     <!-- Privacy Consent -->
     <string name="privacy_consent_title">Privacidade</string>
-    <string name="privacy_consent_message">Para corrigir ou traduzir, o trecho selecionado será enviado ao serviço de tradução do Google. Isso só acontece quando você solicita uma dessas ações.</string>
+    <string name="privacy_consent_message">Para corrigir ou traduzir, o texto selecionado ou o campo inteiro será enviado ao Codex/OpenAI para processamento. Em campos de senha identificados pelo Android, esses recursos são desativados. Isso só acontece quando você solicita uma dessas ações.</string>
     <string name="consent_continue">Continuar</string>
 
     <!-- Onboarding / Status Screen -->
@@ -48,7 +48,7 @@
     <string name="status_ready_desc">Abra qualquer aplicativo e comece a digitar.</string>
 
     <string name="privacy_info_title">Privacidade</string>
-    <string name="privacy_info_body">O texto só é enviado ao serviço de tradução quando você toca em Corrigir ou Traduzir.\n\nEm campos de senha identificados pelo Android, essas funções são desativadas e o conteúdo não é enviado ao serviço de tradução.</string>
+    <string name="privacy_info_body">O texto só é enviado ao Codex/OpenAI quando você toca em Corrigir ou Traduzir.\n\nEm campos de senha identificados pelo Android, essas funções são desativadas e o conteúdo não é enviado ao Codex/OpenAI.</string>
     <string name="switch_keyboard">Alternar teclado</string>
     <string name="open_emojis">Abrir emojis</string>
 </resources>

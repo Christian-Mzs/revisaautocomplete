@@ -4,7 +4,16 @@ data class TranslationTargetLanguage(
     val displayName: String,
     val languageCode: String,
     val secondaryName: String? = null
-)
+) {
+    val promptName: String get() = when (languageCode) {
+        "es" -> "Spanish"
+        "pt" -> "Portuguese"
+        "fr" -> "French"
+        "de" -> "German"
+        "it" -> "Italian"
+        else -> secondaryName ?: displayName
+    }
+}
 
 object SupportedLanguages {
     val ALL: List<TranslationTargetLanguage> = listOf(

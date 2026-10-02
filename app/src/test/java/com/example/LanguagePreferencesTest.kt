@@ -20,24 +20,21 @@ class LanguagePreferencesTest {
         context.getSharedPreferences("revisa_languages", Context.MODE_PRIVATE).edit().clear().commit()
     }
 
-    @Test fun `defaults preserve original nine choices and Portuguese correction`() {
+    @Test fun `defaults preserve original nine choices`() {
         val prefs = LanguagePreferences(context)
         assertEquals(SupportedLanguages.DEFAULT_CODES, prefs.translationLanguages.map { it.languageCode }.toSet())
-        assertEquals("pt", prefs.correctionOutputLanguageCode)
         assertEquals("日本語", SupportedLanguages.find("ja")!!.displayName)
         assertEquals("Japanese", SupportedLanguages.find("ja")!!.secondaryName)
         assertEquals("Korean", SupportedLanguages.find("ko")!!.secondaryName)
     }
 
-    @Test fun `adding removing and correction choice persist independently`() {
+    @Test fun `adding removing persist independently`() {
         val prefs = LanguagePreferences(context)
         assertTrue(prefs.setTranslationEnabled("ru", true))
         assertTrue(prefs.setTranslationEnabled("ja", false))
-        assertTrue(prefs.setCorrectionOutputLanguage("ja"))
         val restored = LanguagePreferences(context)
         assertTrue(restored.translationLanguages.any { it.languageCode == "ru" })
         assertFalse(restored.translationLanguages.any { it.languageCode == "ja" })
-        assertEquals("ja", restored.correctionOutputLanguageCode)
         val ordered = SupportedLanguages.getSortedWithPreferred("ja", restored.translationLanguages)
         assertFalse(ordered.any { it.languageCode == "ja" })
     }
@@ -49,8 +46,6 @@ class LanguagePreferencesTest {
         }
         assertFalse(prefs.setTranslationEnabled("pt", false))
         assertFalse(prefs.setTranslationEnabled("unknown", true))
-        assertFalse(prefs.setCorrectionOutputLanguage("unknown"))
         assertEquals(listOf("pt"), prefs.translationLanguages.map { it.languageCode })
-        assertEquals("pt", prefs.correctionOutputLanguageCode)
     }
 }

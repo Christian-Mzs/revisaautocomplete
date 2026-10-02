@@ -7,6 +7,8 @@ import com.example.translation.TranslationTargetLanguage
 class LanguagePreferences(context: Context) {
     private val prefs = context.applicationContext.getSharedPreferences("revisa_languages", Context.MODE_PRIVATE)
 
+    init { prefs.edit().remove("correction_output").apply() }
+
     val translationLanguages: List<TranslationTargetLanguage>
         get() {
             val codes = prefs.getStringSet("translation_codes", null) ?: SupportedLanguages.DEFAULT_CODES
@@ -24,12 +26,4 @@ class LanguagePreferences(context: Context) {
         return true
     }
 
-    val correctionOutputLanguageCode: String
-        get() = SupportedLanguages.find(prefs.getString("correction_output", "pt") ?: "pt")?.languageCode ?: "pt"
-
-    fun setCorrectionOutputLanguage(code: String): Boolean {
-        val canonical = SupportedLanguages.find(code)?.languageCode ?: return false
-        prefs.edit().putString("correction_output", canonical).apply()
-        return true
-    }
 }

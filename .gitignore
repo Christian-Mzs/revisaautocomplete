@@ -15,3 +15,12 @@
 .cxx
 local.properties
 debug.keystore
+
+.runtime-cache/
+app/src/main/assets/runtime/
+app/src/main/jniLibs/
+__pycache__/
+*.pyc
+app/src/main/assets/licenses/*-source.tar.*
+app/src/main/assets/licenses/PRoot-build-scripts.tar.gz
+app/src/main/assets/licenses/Runtime-build-scripts.zip

@@ -26,7 +26,7 @@ class TranslationConsentManager(context: Context) {
 
     companion object {
         private const val PREFS_NAME = "revisa_preferences"
-        private const val KEY_CONSENT_ACCEPTED = "consent_accepted_translation"
+        private const val KEY_CONSENT_ACCEPTED = "consent_accepted_codex_v1"
         private const val KEY_LAST_TRANSLATION_LANG = "last_translation_language"
 
         @Volatile

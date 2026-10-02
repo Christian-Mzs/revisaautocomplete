@@ -6,7 +6,7 @@ import android.view.inputmethod.EditorInfo
 import androidx.test.core.app.ApplicationProvider
 import com.example.ime.KeyboardController
 import com.example.ime.TextActionUiState
-import com.example.translation.TranslationService
+import com.example.codex.*
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
@@ -46,13 +46,12 @@ class SensitiveFieldSecurityTest {
         val testDispatcher = StandardTestDispatcher()
         val testScope = TestScope(testDispatcher)
 
-        val fakeProvider = FakeTranslationProvider()
-        val translationService = TranslationService(provider = fakeProvider)
+        val engine = FakeCodexEngine()
 
         val controller = KeyboardController(
             context = context,
             coroutineScope = testScope,
-            translationService = translationService,
+            textEngine = engine,
             onStateChanged = {}
         )
         // Mark consent as accepted so we test the security gate specifically
@@ -79,7 +78,7 @@ class SensitiveFieldSecurityTest {
         assertFalse("Text must never be read from sensitive fields", spyingIc.wasTextRead)
 
         // 3. Provider MUST NOT have been called
-        assertEquals(0, fakeProvider.callCount)
+        assertEquals(0, engine.calls.size + engine.ensureCount)
     }
 
     @Test
@@ -88,13 +87,12 @@ class SensitiveFieldSecurityTest {
         val testDispatcher = StandardTestDispatcher()
         val testScope = TestScope(testDispatcher)
 
-        val fakeProvider = FakeTranslationProvider()
-        val translationService = TranslationService(provider = fakeProvider)
+        val engine = FakeCodexEngine()
 
         val controller = KeyboardController(
             context = context,
             coroutineScope = testScope,
-            translationService = translationService,
+            textEngine = engine,
             onStateChanged = {}
         )
         controller.consentManager.setConsentAccepted(true)
@@ -121,6 +119,6 @@ class SensitiveFieldSecurityTest {
         assertFalse("Text must never be read from sensitive fields", spyingIc.wasTextRead)
 
         // 4. Provider MUST NOT have been called
-        assertEquals(0, fakeProvider.callCount)
+        assertEquals(0, engine.calls.size + engine.ensureCount)
     }
 }

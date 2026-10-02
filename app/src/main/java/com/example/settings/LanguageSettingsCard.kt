@@ -20,11 +20,7 @@ fun LanguageSettingsCard() {
     val context = LocalContext.current
     val preferences = remember(context) { LanguagePreferences(context) }
     var enabledCodes by remember { mutableStateOf(preferences.translationLanguages.map { it.languageCode }.toSet()) }
-    var correctionCode by remember { mutableStateOf(preferences.correctionOutputLanguageCode) }
     var showTranslation by remember { mutableStateOf(false) }
-    var showCorrection by remember { mutableStateOf(false) }
-    val correctionLanguage = SupportedLanguages.find(correctionCode)
-    val correctionName = correctionLanguage?.secondaryName ?: correctionLanguage?.displayName ?: "Português"
 
     Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp)) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -33,13 +29,7 @@ fun LanguageSettingsCard() {
                 style = MaterialTheme.typography.bodyMedium)
             Text("${enabledCodes.size} idiomas selecionados", style = MaterialTheme.typography.bodySmall)
             OutlinedButton(onClick = { showTranslation = true }) { Text("Gerenciar idiomas de tradução") }
-            HorizontalDivider()
-            Text("Idioma do resultado da correção", fontWeight = FontWeight.SemiBold)
-            Text(if (correctionCode == "en") "Detecção automática → Inglês"
-                else "Detecção automática → Inglês → $correctionName", style = MaterialTheme.typography.bodyMedium)
-            Text("Se o idioma final for diferente do texto original, o resultado também será traduzido.",
-                style = MaterialTheme.typography.bodySmall)
-            OutlinedButton(onClick = { showCorrection = true }) { Text("Alterar idioma da correção") }
+
         }
     }
 
@@ -68,28 +58,7 @@ fun LanguageSettingsCard() {
             confirmButton = { TextButton(onClick = { showTranslation = false }) { Text("Concluído") } })
     }
 
-    if (showCorrection) {
-        AlertDialog(onDismissRequest = { showCorrection = false },
-            title = { Text("Idioma final da correção") },
-            text = {
-                Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
-                    SupportedLanguages.ALL.forEach { language ->
-                        val choose: () -> Unit = {
-                            if (preferences.setCorrectionOutputLanguage(language.languageCode)) {
-                                correctionCode = language.languageCode
-                                showCorrection = false
-                            }
-                        }
-                        Row(Modifier.fillMaxWidth().clickable(onClick = choose)
-                            .padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                            RadioButton(selected = correctionCode == language.languageCode, onClick = choose)
-                            LanguageName(language, Modifier.weight(1f))
-                        }
-                    }
-                }
-            },
-            confirmButton = { TextButton(onClick = { showCorrection = false }) { Text("Fechar") } })
-    }
+
 }
 
 @Composable

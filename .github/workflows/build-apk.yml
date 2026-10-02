@@ -11,6 +11,7 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -21,11 +22,26 @@ jobs:
           distribution: temurin
           java-version: '17'
 
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
 
       - name: Make Gradle Wrapper executable
         run: chmod +x gradlew
+
+      - name: Test runtime packager
+        run: python3 tools/test_prepare_runtime.py
+
+      - name: Install pinned NDK for PRoot
+        run: sdkmanager "ndk;27.2.12479018"
+
+      - name: Test PRoot and Codex configuration
+        run: python3 tools/test_runtime_compatibility.py
+
+      - name: Prepare pinned ARM64 runtime
+        run: ANDROID_NDK_HOME="$ANDROID_HOME/ndk/27.2.12479018" python3 tools/prepare_runtime.py
 
       - name: Run debug unit tests
         run: ./gradlew testDebugUnitTest
