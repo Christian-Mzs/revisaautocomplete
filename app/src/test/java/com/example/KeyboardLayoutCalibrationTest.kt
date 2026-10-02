@@ -59,10 +59,18 @@ class KeyboardLayoutCalibrationTest {
         }
         val all = descendants(surface)
         for ((letter, center) in listOf("q" to 43.5f, "p" to 647.5f,
-            "a" to 77f, "l" to 614f, "z" to 143.5f, "m" to 547.5f)) {
+            "z" to 143.5f, "m" to 547.5f)) {
             val key = all.first { it.tag == letter }
             reference(center, surface.left + key.left + key.width / 2f)
         }
+        val second = surface.getChildAt(2) as LinearLayout
+        val letters = (0 until second.childCount).map { second.getChildAt(it) }.filter { it.tag is String }
+        assertEquals(9, letters.size)
+        assertEquals(0.35f, com.example.ui.keyboard.KeyboardGeometry.SECOND_ROW_SIDE_INSET_WEIGHT, 0f)
+        val expectedWidth = second.width / 9.7f
+        letters.forEach { assertEquals(expectedWidth, it.width.toFloat(), 1f) }
+        assertEquals(second.width / 2f, (letters.first().left + letters.last().right) / 2f, 1f)
+        assertEquals(expectedWidth * 0.35f, letters.first().left.toFloat(), 1f)
         val bottom = surface.getChildAt(4) as LinearLayout
         val expectedEdges = listOf(15f to 105f, 116f to 172f, 183f to 508f,
             519f to 575f, 586f to 676f)

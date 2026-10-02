@@ -333,9 +333,11 @@ class KeyboardTouchTest {
                         val right = rowView.left + key.right - surface.visualHorizontalInsetPx
                         val top = rowView.top + key.top
                         val bottom = rowView.top + key.bottom
-                        for (y in top + 1 until bottom step 2) for (x in left + 1 until right step 2) {
+                        for (y in top + 1 until minOf(bottom, surface.height - (5 * context.resources.displayMetrics.density).toInt()) step 2) for (x in maxOf(left + 1, (3 * context.resources.displayMetrics.density).toInt()) until right step 2) {
                             assertSame("Containment $mode $width ${key.tag} $x,$y", key,
-                                surface.hitTest(x.toFloat(), y.toFloat()))
+                                surface.hitTest(
+                                    x - com.example.ui.keyboard.KeyboardGeometry.TOUCH_BIAS_X_DP * context.resources.displayMetrics.density,
+                                    y - com.example.ui.keyboard.KeyboardGeometry.TOUCH_BIAS_Y_DP * context.resources.displayMetrics.density))
                         }
                     }
                     for (pair in interactive.zipWithNext()) {
@@ -543,6 +545,69 @@ class KeyboardTouchTest {
         assertEquals(0L, counts["commitAccepted"])
         assertEquals("", ic.currentText)
         view.dismissPopup()
+    }
+
+    @Test fun `release retargets normal keys once including a shifted row`() {
+        for ((start, end) in listOf("w" to "e", "d" to "r", "x" to "c")) {
+            val ic = FakeInputConnection()
+            val (_, view) = keyboard(ic)
+            val surface = surface(view)
+            val letters = keys(view).associateBy { it.tag.toString() }
+            val down = surfacePoint(letters.getValue(start), surface)
+            val up = surfacePoint(letters.getValue(end), surface)
+            com.example.ime.InputMetrics.reset()
+            surfaceEvent(surface, MotionEvent.ACTION_DOWN, intArrayOf(7), listOf(down))
+            assertEquals("", ic.currentText)
+            surfaceEvent(surface, MotionEvent.ACTION_UP, intArrayOf(7), listOf(up))
+            surfaceEvent(surface, MotionEvent.ACTION_UP, intArrayOf(7), listOf(up))
+            assertEquals(end, ic.currentText)
+            assertEquals(1L, com.example.ime.InputMetrics.snapshot()["activation"])
+            assertFalse(letters.getValue(start).isPressed)
+            view.dismissPopup()
+        }
+    }
+
+    @Test fun `accent release over another key keeps selected accent`() {
+        val ic = FakeInputConnection()
+        val (_, view) = keyboard(ic)
+        val surface = surface(view)
+        val c = surfacePoint(keys(view).first { it.tag == "c" }, surface)
+        val v = surfacePoint(keys(view).first { it.tag == "v" }, surface)
+        surfaceEvent(surface, MotionEvent.ACTION_DOWN, intArrayOf(7), listOf(c))
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(ViewConfiguration.getLongPressTimeout() + 1L))
+        surfaceEvent(surface, MotionEvent.ACTION_UP, intArrayOf(7), listOf(v))
+        assertEquals("ç", ic.currentText)
+        view.dismissPopup()
+    }
+
+    @Test fun `backspace release over a letter does not retarget or delete again`() {
+        val ic = FakeInputConnection("abcdef")
+        val (_, view) = keyboard(ic)
+        val surface = surface(view)
+        val row = surface.getChildAt(3) as LinearLayout
+        val back = surfacePoint(row.getChildAt(row.childCount - 1), surface)
+        val a = surfacePoint(keys(view).first { it.tag == "a" }, surface)
+        surfaceEvent(surface, MotionEvent.ACTION_DOWN, intArrayOf(7), listOf(back))
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(351))
+        assertEquals("abcd", ic.currentText)
+        surfaceEvent(surface, MotionEvent.ACTION_UP, intArrayOf(7), listOf(a))
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(1000))
+        assertEquals("abcd", ic.currentText)
+        view.dismissPopup()
+    }
+
+    @Test fun `outside or cancelled release never commits a retargeted letter`() {
+        for ((point, flags) in listOf((-1f to 20f) to 0,
+            (Float.NaN to 20f) to 0, (100f to 100f) to MotionEvent.FLAG_CANCELED)) {
+            val ic = FakeInputConnection()
+            val (_, view) = keyboard(ic)
+            val surface = surface(view)
+            val a = surfacePoint(keys(view).first { it.tag == "a" }, surface)
+            surfaceEvent(surface, MotionEvent.ACTION_DOWN, intArrayOf(7), listOf(a))
+            surfaceEvent(surface, MotionEvent.ACTION_UP, intArrayOf(7), listOf(point), flags)
+            assertEquals("", ic.currentText)
+            view.dismissPopup()
+        }
     }
 
 }

@@ -52,7 +52,8 @@ class KeyboardLayoutView(
     private val keyboardKeysContainer: KeyboardSurfaceView
     private val handler = Handler(Looper.getMainLooper())
     private data class KeyBinding(val action: () -> Unit, val accents: List<String> = emptyList(),
-        val accentAction: ((String) -> Unit)? = null, val repeat: Boolean = false)
+        val accentAction: ((String) -> Unit)? = null, val repeat: Boolean = false,
+        val retargetable: Boolean = false)
     private class Press(val key: View, val binding: KeyBinding, val startX: Float) {
         var strip: AccentStrip? = null
         var timer: Runnable? = null
@@ -1233,7 +1234,7 @@ class KeyboardLayoutView(
             controller.handleSpace()
         }
 
-        installTapTouch(frame) { controller.handleSpace() }
+        installTapTouch(frame, retargetable = true) { controller.handleSpace() }
         return frame
     }
 
@@ -1338,7 +1339,7 @@ class KeyboardLayoutView(
             else if (direct) controller.handleDirectCharacter(selected)
             else controller.handleCharacter(selected)
         }
-        installBinding(key, KeyBinding({ commit(char) }, accents, commit))
+        installBinding(key, KeyBinding({ commit(char) }, accents, commit, retargetable = !emoji))
     }
 
     @SuppressLint("ClickableViewAccessibility")
@@ -1419,10 +1420,25 @@ class KeyboardLayoutView(
                     return
                 }
                 if (!press.binding.repeat) {
+                    var releaseKey = press.key
+                    var releaseBinding = press.binding
+                    if (strip == null && fromSurface && press.binding.retargetable) {
+                        val candidate = keyboardKeysContainer.hitTest(event.getX(index), event.getY(index))
+                        if (candidate == null) {
+                            InputMetrics.abandoned()
+                            return
+                        }
+                        // Ordinary input may settle onto another character/space, never a command.
+                        val candidateBinding = keyBindings[candidate]
+                        if (candidateBinding?.retargetable == true) {
+                            releaseKey = candidate
+                            releaseBinding = candidateBinding
+                        }
+                    }
                     InputMetrics.activation()
                     if (strip != null) press.binding.accentAction?.invoke(press.binding.accents[strip.selected])
-                    else press.binding.action()
-                    press.key.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                    else releaseBinding.action()
+                    releaseKey.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
                 }
             }
             MotionEvent.ACTION_CANCEL -> {
@@ -1489,9 +1505,9 @@ class KeyboardLayoutView(
         return android.graphics.drawable.InsetDrawable(states, gap, 0, gap, 0)
     }
 
-    private fun installTapTouch(key: View, action: () -> Unit) {
+    private fun installTapTouch(key: View, retargetable: Boolean = false, action: () -> Unit) {
         key.setOnClickListener { action() } // Accessibility activation only.
-        installBinding(key, KeyBinding(action))
+        installBinding(key, KeyBinding(action, retargetable = retargetable))
     }
 
     private fun createRoundedDrawable(

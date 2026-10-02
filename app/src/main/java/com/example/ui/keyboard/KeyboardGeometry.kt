@@ -1,7 +1,7 @@
 package com.example.ui.keyboard
 
 /** Physical dimensions calibrated against the Galaxy M52 reference captures.
- * Ten equal horizontal slots align QWERTY; ASDF starts half a slot in;
+ * Ten equal horizontal slots align QWERTY; ASDF has reduced symmetric insets;
  * ZXCV starts one and a half slots in. SCALE applies to text only.
  */
 object KeyboardGeometry {
@@ -28,8 +28,10 @@ object KeyboardGeometry {
     const val PUNCTUATION_KEY_WEIGHT = 1f
     const val SPACE_KEY_WEIGHT = 5f
     const val ACTION_KEY_WEIGHT = 1.5f
-    // Half a letter cell on each side keeps the nine-letter row centered.
-    const val SECOND_ROW_SIDE_INSET_WEIGHT = 0.5f
+    // Reduced symmetric insets widen the nine-letter row while keeping its stagger.
+    const val SECOND_ROW_SIDE_INSET_WEIGHT = 0.35f
+    const val TOUCH_BIAS_X_DP = 3f
+    const val TOUCH_BIAS_Y_DP = -5f
     const val TOOLBAR_HEIGHT_DP = 44
     const val TOOLBAR_BOTTOM_GAP_DP = 6
     const val TOOL_FONT_SP = 13.5f * SCALE

@@ -36,19 +36,25 @@ internal class KeyboardSurfaceView(context: Context) : LinearLayout(context) {
             { it.visualBounds.bottom }, { it.visualBounds.right }))
     }
 
-    /** Visual containment wins. Only gaps use squared distance to the rectangle in 2D.
+    /** Containment of the compensated point wins. Only gaps use squared distance to the rectangle in 2D.
      * Exact distance ties use the geometric order above, independently of child order.
      * Every finite point in [0,width) × [0,height) resolves when keys are laid out.
      * External keyboard padding is excluded. RectF uses half-open containment. */
     fun hitTest(x: Float, y: Float): View? {
         if (!x.isFinite() || !y.isFinite() || x < 0 || y < 0 || x >= width || y >= height) return null
-        targets.firstOrNull { it.visualBounds.contains(x, y) }?.let { return it.view }
+        // Validate physical coordinates first: compensation must never admit outside touches.
+        val density = resources.displayMetrics.density
+        val adjustedX = (x + KeyboardGeometry.TOUCH_BIAS_X_DP * density)
+            .coerceIn(0f, Math.nextDown(width.toFloat()))
+        val adjustedY = (y + KeyboardGeometry.TOUCH_BIAS_Y_DP * density)
+            .coerceIn(0f, Math.nextDown(height.toFloat()))
+        targets.firstOrNull { it.visualBounds.contains(adjustedX, adjustedY) }?.let { return it.view }
         var nearest: Target? = null
         var minimum = Float.POSITIVE_INFINITY
         for (target in targets) {
             val bounds = target.visualBounds
-            val dx = maxOf(bounds.left - x, 0f, x - bounds.right)
-            val dy = maxOf(bounds.top - y, 0f, y - bounds.bottom)
+            val dx = maxOf(bounds.left - adjustedX, 0f, adjustedX - bounds.right)
+            val dy = maxOf(bounds.top - adjustedY, 0f, adjustedY - bounds.bottom)
             val distance = dx * dx + dy * dy
             if (distance < minimum) {
                 minimum = distance

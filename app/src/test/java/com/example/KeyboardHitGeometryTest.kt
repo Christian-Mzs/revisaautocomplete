@@ -13,7 +13,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [34])
+@Config(sdk = [34], qualifiers = "mdpi")
 class KeyboardHitGeometryTest {
     private val context: Context get() = ApplicationProvider.getApplicationContext()
 
@@ -50,47 +50,72 @@ class KeyboardHitGeometryTest {
     @Test fun `space owns center edges top bottom and all internal corners`() {
         val (surface, keys) = fixture()
         val points = listOf(250f to 79f, 142f to 79f, 358f to 79f,
-            250f to 59f, 250f to 100f, 142f to 59f, 358f to 59f,
-            142f to 100f, 358f to 100f)
-        points.forEach { (x, y) -> assertSame("space at $x,$y", keys["space"], surface.hitTest(x, y)) }
+            250f to 59f, 250f to 95f, 142f to 59f, 358f to 59f,
+            142f to 95f, 358f to 95f)
+        points.forEach { (x, y) -> assertSame("space at $x,$y", keys["space"], surface.hitTest(x - 3f, y + 5f)) }
     }
 
     @Test fun `lower edges of staggered and wide keys cannot be stolen by bottom row`() {
         val (surface, keys) = fixture()
         for ((name, x) in listOf("x" to 122f, "z" to 113f, "m" to 373f,
             "shift" to 63f, "backspace" to 417f)) {
-            assertSame(name, keys[name], surface.hitTest(x, 44f))
+            assertSame(name, keys[name], surface.hitTest(x - 3f, 49f))
         }
-        assertSame(keys[","], surface.hitTest(122f, 56f))
-        assertSame(keys["."], surface.hitTest(373f, 56f))
-        assertSame(keys["action"], surface.hitTest(417f, 56f))
-        assertSame(keys["shift"], surface.hitTest(63f, 50f))
+        assertSame(keys[","], surface.hitTest(119f, 61f))
+        assertSame(keys["."], surface.hitTest(370f, 61f))
+        assertSame(keys["action"], surface.hitTest(414f, 61f))
+        assertSame(keys["shift"], surface.hitTest(60f, 55f))
     }
 
     @Test fun `gap ties prefer upper then left regardless of child order`() {
         for (reverse in listOf(false, true)) {
             val (surface, keys) = fixture(reverse)
             repeat(10) {
-                assertSame(keys["x"], surface.hitTest(122f, 51f))
-                assertSame(keys[","], surface.hitTest(137.5f, 70f))
+                assertSame(keys["x"], surface.hitTest(119f, 56f))
+                assertSame(keys[","], surface.hitTest(134.5f, 75f))
             }
         }
     }
 
-    @Test fun `every interior pixel belongs to its visual key and surface has no holes`() {
+    @Test fun `every key center resolves and surface has no holes`() {
         val (surface, keys) = fixture()
         keys.values.forEach { key ->
             val row = key.parent as View
-            for (y in 1 until key.height) for (x in 1 until key.width) {
-                assertSame(key, surface.hitTest((row.left + key.left + x).toFloat(),
-                    (row.top + key.top + y).toFloat()))
-            }
+            assertSame(key, surface.hitTest(row.left + key.left + key.width / 2f,
+                row.top + key.top + key.height / 2f))
         }
         for (y in 0 until surface.height) for (x in 0 until surface.width) {
             assertNotNull(surface.hitTest(x.toFloat(), y.toFloat()))
         }
         assertNull(surface.hitTest(Float.NaN, 0f))
         assertNull(surface.hitTest(0f, Float.POSITIVE_INFINITY))
+    }
+
+    @Test fun `bias favors right and upper neighbors near decision boundaries`() {
+        val (surface, keys) = fixture()
+        // Original gap boundary is x=117.5; +3 moves this point to x.
+        assertSame(keys["x"], surface.hitTest(116f, 22f))
+        // Original row boundary is y=51; -5 keeps this point in the upper row.
+        assertSame(keys["x"], surface.hitTest(125f, 54f))
+        assertSame(keys[","], surface.hitTest(125f, 58f))
+    }
+
+    @Test fun `outside and non finite physical coordinates cannot be clamped into keys`() {
+        val (surface, _) = fixture()
+        listOf(-0.1f to 20f, 20f to -0.1f, 450f to 20f, 20f to 102f,
+            Float.NaN to 20f, 20f to Float.NaN, Float.POSITIVE_INFINITY to 20f,
+            Float.NEGATIVE_INFINITY to 20f, 20f to Float.POSITIVE_INFINITY,
+            20f to Float.NEGATIVE_INFINITY).forEach { (x, y) -> assertNull(surface.hitTest(x, y)) }
+        assertNotNull(surface.hitTest(0f, 0f))
+        assertNotNull(surface.hitTest(449.99f, 101.99f))
+    }
+
+    @Test @Config(qualifiers = "xhdpi")
+    fun `bias scales with density`() {
+        val (surface, keys) = fixture()
+        assertEquals(2f, context.resources.displayMetrics.density, 0f)
+        assertSame(keys["x"], surface.hitTest(113f, 22f))
+        assertSame(keys["x"], surface.hitTest(125f, 59f))
     }
 
     @Test fun `calibration keeps physical heights separate from existing font scale`() {
