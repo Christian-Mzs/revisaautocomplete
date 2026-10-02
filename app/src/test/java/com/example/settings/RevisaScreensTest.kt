@@ -2,9 +2,11 @@ package com.example.settings
 
 import android.graphics.Bitmap
 import androidx.compose.runtime.*
-import androidx.compose.ui.graphics.asAndroidBitmap
+import android.graphics.Canvas
+import android.view.View
+import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.*
-import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
@@ -18,7 +20,7 @@ import java.io.File
 @Config(sdk = [34], qualifiers = "w412dp-h892dp-mdpi")
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class RevisaScreensTest {
-    @get:Rule val compose = createComposeRule()
+    @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
 
     @Test fun `IME completion follows real flags and demos never require an account`() {
         var enabled by mutableStateOf(false)
@@ -126,7 +128,14 @@ class RevisaScreensTest {
     private fun primary() { compose.onNodeWithTag("onboarding_primary").performClick(); compose.waitForIdle() }
     private fun capture(name: String) {
         compose.waitForIdle()
-        val bitmap = compose.onRoot().captureToImage().asAndroidBitmap()
+        // PixelCopy requires a hardware window callback unavailable in Robolectric.
+        // Draw the actual laid-out Android view tree through native Skia instead.
+        lateinit var bitmap: Bitmap
+        compose.runOnIdle {
+            val content = compose.activity.findViewById<View>(android.R.id.content)
+            bitmap = Bitmap.createBitmap(content.width, content.height, Bitmap.Config.ARGB_8888)
+            content.draw(Canvas(bitmap))
+        }
         val destination = File("build/reports/revisa-ui/$name.png")
         destination.parentFile.mkdirs()
         destination.outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }

@@ -57,6 +57,16 @@ class CodexAccountViewModelTest {
         assertFalse(backend.calls.contains("logout"))
     }
 
+    @Test fun `immediate cancellation does not leave preparation stuck`() = runTest(dispatcher) {
+        vm.login(); vm.cancel(); runCurrent()
+        assertFalse(vm.state.busy)
+        assertNull(vm.browserIntent())
+        assertTrue(backend.calls.isEmpty())
+        vm.login(); runCurrent()
+        assertTrue(vm.state.canOpenBrowser)
+        vm.cancel(); runCurrent()
+    }
+
     @Test fun `cancel preparation never starts login`() = runTest(dispatcher) {
         backend.holdPreparation = true
         vm.login(); runCurrent()

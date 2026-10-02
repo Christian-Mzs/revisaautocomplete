@@ -61,7 +61,7 @@ class CodexAccountViewModel internal constructor(
     private var generation = 0
 
     private fun run(operation: AccountOperation, failure: String, block: suspend (Int) -> Unit) {
-        if (state.busy) return
+        if (state.busy || task?.isCompleted == false) return
         val attempt = ++generation
         state = state.copy(operation = AccountOperation.PREPARING, error = null, canOpenBrowser = false)
         task = viewModelScope.launch {
@@ -107,7 +107,7 @@ class CodexAccountViewModel internal constructor(
     fun cancel() {
         generation++
         loginUrl = null
-        state = state.copy(canOpenBrowser = false, error = null)
+        state = state.copy(operation = AccountOperation.IDLE, canOpenBrowser = false, error = null)
         task?.cancel() // Propagates to CodexRuntime.execute's process cleanup.
     }
 

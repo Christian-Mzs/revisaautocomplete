@@ -132,7 +132,7 @@ private fun HeroMascot(resource: Int, height: androidx.compose.ui.unit.Dp) {
 @Composable
 private fun IntroSlide(index: Int, compact: Boolean) {
     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
-        HeroMascot(R.drawable.revisa_stand, if (compact) 202.dp else 255.dp)
+        HeroMascot(R.drawable.revisa_onboarding_stand, if (compact) 202.dp else 255.dp)
         Spacer(Modifier.height(if (compact) 9.dp else 17.dp))
         Heading("Olá, eu sou o Revisa.", if (compact) 34.sp else 40.sp, centered = true,
             modifier = Modifier.padding(horizontal = 8.dp))
@@ -155,7 +155,7 @@ private fun IntroSlide(index: Int, compact: Boolean) {
 @Composable
 private fun PreparationSlide(compact: Boolean) {
     Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-        HeroMascot(R.drawable.revisa_point, if (compact) 186.dp else 232.dp)
+        HeroMascot(R.drawable.revisa_onboarding_point, if (compact) 186.dp else 232.dp)
         Spacer(Modifier.height(if (compact) 9.dp else 17.dp))
         Heading("Vamos começar?", if (compact) 33.sp else 38.sp, centered = true)
         Spacer(Modifier.height(14.dp))
@@ -268,7 +268,7 @@ private fun DemoSlide(translate: Boolean, result: Boolean, compact: Boolean) {
 
 @Composable
 private fun FinishSlide(compact: Boolean) {
-    HeroMascot(R.drawable.revisa_icon, if (compact) 188.dp else 232.dp)
+    HeroMascot(R.drawable.revisa_onboarding_run, if (compact) 188.dp else 232.dp)
     Spacer(Modifier.height(if (compact) 9.dp else 17.dp))
     Box {
         Canvas(Modifier.offset(x = 52.dp, y = (-10).dp).size(20.dp)) {
