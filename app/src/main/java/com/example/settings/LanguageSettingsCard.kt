@@ -1,73 +1,50 @@
 package com.example.settings
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.*
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.example.translation.SupportedLanguages
-import com.example.translation.TranslationTargetLanguage
+
+// Labels match the Portuguese reference. Codes/order/availability still come from SupportedLanguages.
+private val languageLabels = mapOf("en" to "Inglês", "es" to "Espanhol", "pt" to "Português",
+    "fr" to "Francês", "de" to "Alemão", "it" to "Italiano", "zh-CN" to "Chinês simplificado",
+    "ja" to "Japonês", "ko" to "Coreano", "zh-TW" to "Chinês tradicional", "ar" to "Árabe",
+    "ru" to "Russo", "hi" to "Hindi", "nl" to "Holandês", "sv" to "Sueco", "no" to "Norueguês",
+    "da" to "Dinamarquês", "fi" to "Finlandês", "pl" to "Polonês", "tr" to "Turco", "el" to "Grego",
+    "uk" to "Ucraniano", "he" to "Hebraico", "id" to "Indonésio", "th" to "Tailandês", "vi" to "Vietnamita")
 
 @Composable
-fun LanguageSettingsCard() {
-    val context = LocalContext.current
-    val preferences = remember(context) { LanguagePreferences(context) }
-    var enabledCodes by remember { mutableStateOf(preferences.translationLanguages.map { it.languageCode }.toSet()) }
-    var showTranslation by remember { mutableStateOf(false) }
-
-    Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp)) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("Idiomas", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            Text("Escolha quais idiomas aparecem ao tocar em Traduzir.",
-                style = MaterialTheme.typography.bodyMedium)
-            Text("${enabledCodes.size} idiomas selecionados", style = MaterialTheme.typography.bodySmall)
-            OutlinedButton(onClick = { showTranslation = true }) { Text("Gerenciar idiomas de tradução") }
-
+internal fun LanguageSettingsPage(enabledCodes: Set<String>, onLanguage: (String, Boolean) -> Boolean) {
+    var lastLanguageMessage by remember { mutableStateOf(false) }
+    Heading("Idiomas de tradução")
+    Spacer(Modifier.height(14.dp))
+    Copy("Escolha quais idiomas aparecem quando você toca em Traduzir.", color = RevisaColors.Muted)
+    Spacer(Modifier.height(12.dp))
+    Copy("${enabledCodes.size} idiomas selecionados · mantenha pelo menos um.", size = 12.sp)
+    if (lastLanguageMessage) Copy("Mantenha pelo menos um idioma selecionado.", size = 12.sp, color = RevisaColors.Green)
+    Spacer(Modifier.height(18.dp))
+    RevisaCard {
+        SupportedLanguages.ALL.forEachIndexed { i, language ->
+            if (i > 0) Divider()
+            val checked = language.languageCode in enabledCodes
+            Row(Modifier.fillMaxWidth().heightIn(min = 53.dp)
+                .toggleable(checked, role = Role.Checkbox) {
+                    lastLanguageMessage = !onLanguage(language.languageCode, it)
+                }.padding(vertical = 15.dp), verticalAlignment = Alignment.CenterVertically) {
+                Copy(languageLabels[language.languageCode] ?: language.displayName, Modifier.weight(1f))
+                Checkbox(checked, onCheckedChange = null, modifier = Modifier.size(24.dp),
+                    colors = CheckboxDefaults.colors(checkedColor = RevisaColors.Blue))
+            }
         }
     }
-
-    if (showTranslation) {
-        AlertDialog(onDismissRequest = { showTranslation = false },
-            title = { Text("Idiomas de tradução") },
-            text = {
-                Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
-                    Text("Marque os idiomas que deseja mostrar no teclado. Mantenha pelo menos um.")
-                    SupportedLanguages.ALL.forEach { language ->
-                        val selected = language.languageCode in enabledCodes
-                        val canChange = !selected || enabledCodes.size > 1
-                        val change: () -> Unit = {
-                            if (preferences.setTranslationEnabled(language.languageCode, !selected)) {
-                                enabledCodes = preferences.translationLanguages.map { it.languageCode }.toSet()
-                            }
-                        }
-                        Row(Modifier.fillMaxWidth().clickable(enabled = canChange, onClick = change)
-                            .padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Checkbox(checked = selected, enabled = canChange, onCheckedChange = { change() })
-                            LanguageName(language, Modifier.weight(1f))
-                        }
-                    }
-                }
-            },
-            confirmButton = { TextButton(onClick = { showTranslation = false }) { Text("Concluído") } })
-    }
-
-
-}
-
-@Composable
-private fun LanguageName(language: TranslationTargetLanguage, modifier: Modifier) {
-    Column(modifier) {
-        Text(language.displayName)
-        language.secondaryName?.let { hint ->
-            Text(hint, style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-    }
+    Spacer(Modifier.height(18.dp))
+    Copy("O idioma de destino é escolhido dentro do teclado no momento da tradução.", size = 12.sp, color = RevisaColors.Muted)
+    Spacer(Modifier.height(18.dp))
 }

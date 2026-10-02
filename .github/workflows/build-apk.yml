@@ -48,6 +48,17 @@ jobs:
       - name: Run debug unit tests
         run: ./gradlew testDebugUnitTest
 
+      - name: Upload UI previews and test reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: Revisa-ui-review
+          path: |
+            app/build/reports/revisa-ui/
+            app/build/reports/tests/testDebugUnitTest/
+            app/build/test-results/testDebugUnitTest/
+          if-no-files-found: ignore
+
       - name: Build debug APK
         run: ./gradlew assembleDebug
 
