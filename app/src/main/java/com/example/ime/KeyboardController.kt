@@ -242,6 +242,10 @@ class KeyboardController(
                 uiState = TextActionUiState.Preview(title, extracted.textToCorrect, result, extracted)
                 onStateChanged()
             } catch (e: CancellationException) { throw e }
+            catch (e: CodexLoginRequiredException) {
+                uiState = TextActionUiState.LoginRequired
+                onStateChanged()
+            }
             catch (e: Exception) {
                 uiState = TextActionUiState.Error(e.message ?: "Não foi possível processar com Codex.")
                 onStateChanged()
@@ -276,8 +280,26 @@ class KeyboardController(
             return
         }
 
-        uiState = TextActionUiState.SelectingLanguage
-        onStateChanged()
+        val ic = inputConnection
+        val editor = currentEditorInfo
+        val job = coroutineScope.launch(start=CoroutineStart.LAZY) {
+            try {
+                engine.ensureRuntimeReady()
+                ensureActive()
+                if (isSensitiveField || inputConnection !== ic || currentEditorInfo !== editor) return@launch
+                val connected = engine.loginStatus().connected
+                ensureActive()
+                if (isSensitiveField || inputConnection !== ic || currentEditorInfo !== editor) return@launch
+                uiState = if (connected) TextActionUiState.SelectingLanguage else TextActionUiState.LoginRequired
+                onStateChanged()
+            } catch (e: CancellationException) { throw e }
+            catch (e: Exception) {
+                uiState = TextActionUiState.Error(e.message ?: "Não foi possível verificar a conta.")
+                onStateChanged()
+            }
+        }
+        uiState = TextActionUiState.Processing("Preparando…",job)
+        onStateChanged(); job.start()
     }
 
     fun selectLanguageAndTranslate(targetLanguageCode: String) {

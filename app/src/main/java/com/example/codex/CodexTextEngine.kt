@@ -10,3 +10,5 @@ object RuntimeReadiness {
     fun matches(expected: String, validated: String?, filesPresent: Boolean): Boolean =
         filesPresent && expected.isNotBlank() && validated == expected
 }
+
+class CodexLoginRequiredException : IllegalStateException("Entre com ChatGPT para usar este recurso.")

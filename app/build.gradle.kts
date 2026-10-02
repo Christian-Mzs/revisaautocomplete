@@ -96,17 +96,18 @@ dependencies {
 }
 
 val verifyRuntimeAssets by tasks.registering {
+    // Resolve files during configuration; the action captures only serializable Files.
+    val required = listOf(
+        "src/main/jniLibs/arm64-v8a/libproot.so",
+        "src/main/jniLibs/arm64-v8a/libproot-loader.so",
+        "src/main/jniLibs/arm64-v8a/libcodex.so",
+        "src/main/jniLibs/arm64-v8a/libruntime-probe.so",
+        "src/main/assets/runtime/rootfs.zip",
+        "src/main/assets/runtime/manifest.json",
+        "src/main/assets/runtime/provenance.json"
+    ).map { layout.projectDirectory.file(it).asFile }
     doLast {
-        val required = listOf(
-            "src/main/jniLibs/arm64-v8a/libproot.so",
-            "src/main/jniLibs/arm64-v8a/libproot-loader.so",
-            "src/main/jniLibs/arm64-v8a/libcodex.so",
-            "src/main/jniLibs/arm64-v8a/libruntime-probe.so",
-            "src/main/assets/runtime/rootfs.zip",
-            "src/main/assets/runtime/manifest.json",
-            "src/main/assets/runtime/provenance.json"
-        )
-        check(required.all { file(it).isFile }) {
+        check(required.all { it.isFile }) {
             "Runtime incompleto. Execute python3 tools/prepare_runtime.py antes de compilar."
         }
     }

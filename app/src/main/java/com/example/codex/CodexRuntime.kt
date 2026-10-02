@@ -196,45 +196,46 @@ class CodexRuntime private constructor(context: Context) : CodexTextEngine {
     override suspend fun loginStatus(): LoginState {
         ensureRuntimeReady()
         return lock.withLock {
-        check(installed()) { "Runtime não preparado" }
-        session.status()
+            check(installed()) { "Runtime não preparado" }
+            session.status()
         }
     }
 
     suspend fun logout(): LoginState {
         ensureRuntimeReady()
         return lock.withLock {
-        check(verified) { "Prepare e verifique o runtime antes de sair." }
-        session.logout()
+            check(verified) { "Prepare e verifique o runtime antes de sair." }
+            session.logout()
         }
     }
 
     suspend fun login(deviceAuth: Boolean, onLine: (String) -> Unit): String {
         ensureRuntimeReady()
         return lock.withLock {
-        check(verified) { "Prepare e verifique o runtime antes de entrar." }
-        val args = listOf("login") + if (deviceAuth) listOf("--device-auth") else emptyList()
-        val result = execute(codexArgs(args), timeoutMs=300_000,onLine=onLine)
-        check(result.code == 0) { "Login não concluído: ${(result.stderr+result.stdout).takeLast(1800)}" }
-        "Login concluído. As credenciais foram persistidas."
+            check(verified) { "Prepare e verifique o runtime antes de entrar." }
+            val args = listOf("login") + if (deviceAuth) listOf("--device-auth") else emptyList()
+            val result = execute(codexArgs(args), timeoutMs=300_000,onLine=onLine)
+            check(result.code == 0) { "Login não concluído: ${(result.stderr+result.stdout).takeLast(1800)}" }
+            "Login concluído. As credenciais foram persistidas."
         }
     }
 
     override suspend fun processText(text: String, operation: TextOperation): String {
         ensureRuntimeReady()
         return lock.withLock {
-        require(text.isNotBlank()) { "Digite uma frase." }
-        check(verified) { "Prepare e verifique o runtime antes de executar." }
-        withContext(Dispatchers.IO) { work.deleteRecursively(); work.mkdirs(); Os.chmod(work.path,448) }
-        try {
-            val result = execute(codexArgs(operation.command()),
-                stdin=operation.prompt(text),timeoutMs=180_000)
-            check(result.code == 0) { "Codex saiu com código ${result.code}: ${result.stderr.takeLast(2000)}" }
-            // Both operations display only the final-message file, never diagnostics.
-            withContext(Dispatchers.IO) {
-                FinalMessageReader.read(work)
-            }
-        } finally { withContext(NonCancellable + Dispatchers.IO) { work.deleteRecursively(); work.mkdirs() } }
+            require(text.isNotBlank()) { "Digite uma frase." }
+            check(verified) { "Prepare e verifique o runtime antes de executar." }
+            if (!session.status().connected) throw CodexLoginRequiredException()
+            withContext(Dispatchers.IO) { work.deleteRecursively(); work.mkdirs(); Os.chmod(work.path,448) }
+            try {
+                val result = execute(codexArgs(operation.command()),
+                    stdin=operation.prompt(text),timeoutMs=180_000)
+                check(result.code == 0) { "Codex saiu com código ${result.code}: ${result.stderr.takeLast(2000)}" }
+                // Both operations display only the final-message file, never diagnostics.
+                withContext(Dispatchers.IO) {
+                    FinalMessageReader.read(work)
+                }
+            } finally { withContext(NonCancellable + Dispatchers.IO) { work.deleteRecursively(); work.mkdirs() } }
         }
     }
 
