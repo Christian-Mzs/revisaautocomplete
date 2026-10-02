@@ -117,8 +117,8 @@ internal fun OnboardingScreen(enabled: Boolean, selected: Boolean, replay: Boole
                     }
                 }
                 Column(Modifier.padding(start = 24.dp, end = 24.dp,
-                    bottom = if (completed) 48.dp else if (compact) 31.dp else 36.dp)) {
-                    RevisaButton(label, Modifier.testTag("onboarding_primary"), onboarding = true, onClick = next)
+                    bottom = if (compact) 43.dp else 48.dp)) {
+                    RevisaButton(label, Modifier.testTag("onboarding_primary"), onboarding = true, compact = compact, onClick = next)
                 }
             }
         }

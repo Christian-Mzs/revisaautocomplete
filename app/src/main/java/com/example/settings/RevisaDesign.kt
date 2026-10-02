@@ -60,7 +60,7 @@ internal fun RevisaTheme(content: @Composable () -> Unit) {
             background = RevisaColors.Background, surface = RevisaColors.Surface,
             onSurface = RevisaColors.Text, onBackground = RevisaColors.Text),
         typography = Typography(bodyLarge = androidx.compose.ui.text.TextStyle(
-            fontFamily = RevisaFont, fontSize = 15.sp, lineHeight = 23.sp)),
+            fontFamily = RevisaFont, fontSize = 15.sp, lineHeight = 23.sp, letterSpacing = 0.sp)),
         content = content
     )
 }
@@ -70,7 +70,7 @@ internal fun Copy(text: String, modifier: Modifier = Modifier, size: TextUnit = 
     color: Color = RevisaColors.Text, weight: FontWeight = FontWeight.Normal,
     lineHeight: TextUnit = (size.value * 1.55f).sp, align: TextAlign? = null) {
     Text(text, modifier, color = color, fontSize = size, fontWeight = weight,
-        fontFamily = RevisaFont, lineHeight = lineHeight, textAlign = align)
+        fontFamily = RevisaFont, lineHeight = lineHeight, letterSpacing = 0.sp, textAlign = align)
 }
 
 @Composable
@@ -90,15 +90,15 @@ internal fun Eyebrow(text: String) {
 
 @Composable
 internal fun RevisaButton(text: String, modifier: Modifier = Modifier, enabled: Boolean = true,
-    secondary: Boolean = false, cancel: Boolean = false, onboarding: Boolean = false,
+    secondary: Boolean = false, cancel: Boolean = false, onboarding: Boolean = false, compact: Boolean = false,
     onClick: () -> Unit) {
     val radius = RoundedCornerShape(17.dp)
     val color = when { cancel -> Color(0xFF38262C); secondary -> Color.White.copy(alpha = .03f); else -> RevisaColors.Blue }
     val bottom = if (!secondary && !cancel) (if (onboarding) 7.dp else 5.dp) else 0.dp
-    Box(modifier.fillMaxWidth().padding(bottom = bottom)) {
+    Box(modifier.fillMaxWidth()) {
         if (bottom > 0.dp) Box(Modifier.matchParentSize().offset(y = bottom).clip(radius)
             .background(RevisaColors.BlueDepth.copy(alpha = if (enabled) 1f else .45f)))
-        Box(Modifier.fillMaxWidth().heightIn(min = if (onboarding) 56.dp else if (cancel) 46.dp else 54.dp)
+        Box(Modifier.fillMaxWidth().heightIn(min = if (onboarding) (if (compact) 51.dp else 56.dp) else if (cancel) 46.dp else 54.dp)
             .clip(radius).background(color.copy(alpha = color.alpha * if (enabled) 1f else .45f))
             .then(if (secondary || cancel) Modifier.border(1.dp,
                 if (cancel) Color(0xFF634049) else Color.White.copy(alpha = .094f), radius) else Modifier)
