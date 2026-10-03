@@ -201,9 +201,9 @@ class KeyboardTouchTest {
         for (width in listOf(720, 1080)) {
             val heights = KeyboardMode.entries.map { mode ->
                 controller.setMode(mode)
-                view.measure(View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY),
+                view.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
                     View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED))
-                view.layout(0, 0, 1080, view.measuredHeight)
+                view.layout(0, 0, width, view.measuredHeight)
                 if (mode != KeyboardMode.EMOJIS) {
                     val rows = view.getChildAt(1) as LinearLayout
                     assertEquals(5, rows.childCount)
@@ -311,9 +311,9 @@ class KeyboardTouchTest {
         for (mode in listOf(KeyboardMode.LETTERS, KeyboardMode.NUMBERS, KeyboardMode.SYMBOLS)) {
             controller.setMode(mode)
             for (width in listOf(320, 720, 1080)) {
-                view.measure(View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY),
+                view.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
                     View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED))
-                view.layout(0, 0, 1080, view.measuredHeight)
+                view.layout(0, 0, width, view.measuredHeight)
                 val surface = surface(view)
                 for (y in 0 until surface.height step 3) for (x in 0 until surface.width step 3) {
                     assertNotNull("Hole at $mode $width $x $y", surface.hitTest(x.toFloat(), y.toFloat()))
@@ -547,7 +547,6 @@ class KeyboardTouchTest {
         view.dismissPopup()
     }
 
-
     @Test fun `Q A Z E centers keep their letters`() {
         val ic = FakeInputConnection()
         val (_, view) = keyboard(ic)
@@ -712,3 +711,4 @@ class KeyboardTouchTest {
     }
 
 }
+
