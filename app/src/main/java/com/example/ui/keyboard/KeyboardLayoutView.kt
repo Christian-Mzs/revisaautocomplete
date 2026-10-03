@@ -54,7 +54,7 @@ class KeyboardLayoutView(
     private data class KeyBinding(val action: () -> Unit, val accents: List<String> = emptyList(),
         val accentAction: ((String) -> Unit)? = null, val repeat: Boolean = false,
         val retargetable: Boolean = false)
-    private class Press(val key: View, val binding: KeyBinding, val startX: Float) {
+    private class Press(val key: View, val binding: KeyBinding, val startX: Float, val startY: Float) {
         var strip: AccentStrip? = null
         var timer: Runnable? = null
     }
@@ -1366,7 +1366,7 @@ class KeyboardLayoutView(
                     return
                 }
                 InputMetrics.resolved()
-                val press = Press(resolved, binding, event.getX(index))
+                val press = Press(resolved, binding, event.getX(index), event.getY(index))
                 pointers.put(id, press)
                 resolved.isPressed = true
                 if (binding.repeat) {
@@ -1430,7 +1430,12 @@ class KeyboardLayoutView(
                         }
                         // Ordinary input may settle onto another character/space, never a command.
                         val candidateBinding = keyBindings[candidate]
-                        if (candidateBinding?.retargetable == true) {
+                        val dx = event.getX(index) - press.startX
+                        val dy = event.getY(index) - press.startY
+                        val threshold = 10f * resources.displayMetrics.density
+                        if (candidate !== press.key && candidateBinding?.retargetable == true &&
+                            dx * dx + dy * dy > threshold * threshold &&
+                            keyboardKeysContainer.isInsideRetargetArea(candidate, event.getX(index), event.getY(index))) {
                             releaseKey = candidate
                             releaseBinding = candidateBinding
                         }

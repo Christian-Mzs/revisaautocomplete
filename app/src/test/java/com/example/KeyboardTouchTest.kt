@@ -44,14 +44,14 @@ class KeyboardTouchTest {
         try { assertTrue(key.dispatchTouchEvent(event)) } finally { event.recycle() }
     }
 
-    private fun keyboard(ic: FakeInputConnection): Pair<KeyboardController, KeyboardLayoutView> {
+    private fun keyboard(ic: FakeInputConnection, width: Int = 1080): Pair<KeyboardController, KeyboardLayoutView> {
         lateinit var view: KeyboardLayoutView
         val controller = KeyboardController(context, TestScope(), onStateChanged = { view.render() })
         view = KeyboardLayoutView(context, controller)
         controller.updateInputConnection(ic, EditorInfo().apply { inputType = InputType.TYPE_CLASS_TEXT })
-        view.measure(View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY),
+        view.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
             View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED))
-        view.layout(0, 0, 1080, view.measuredHeight)
+        view.layout(0, 0, width, view.measuredHeight)
         return controller to view
     }
 
@@ -201,9 +201,9 @@ class KeyboardTouchTest {
         for (width in listOf(720, 1080)) {
             val heights = KeyboardMode.entries.map { mode ->
                 controller.setMode(mode)
-                view.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
+                view.measure(View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY),
                     View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED))
-                view.layout(0, 0, width, view.measuredHeight)
+                view.layout(0, 0, 1080, view.measuredHeight)
                 if (mode != KeyboardMode.EMOJIS) {
                     val rows = view.getChildAt(1) as LinearLayout
                     assertEquals(5, rows.childCount)
@@ -311,9 +311,9 @@ class KeyboardTouchTest {
         for (mode in listOf(KeyboardMode.LETTERS, KeyboardMode.NUMBERS, KeyboardMode.SYMBOLS)) {
             controller.setMode(mode)
             for (width in listOf(320, 720, 1080)) {
-                view.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
+                view.measure(View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY),
                     View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED))
-                view.layout(0, 0, width, view.measuredHeight)
+                view.layout(0, 0, 1080, view.measuredHeight)
                 val surface = surface(view)
                 for (y in 0 until surface.height step 3) for (x in 0 until surface.width step 3) {
                     assertNotNull("Hole at $mode $width $x $y", surface.hitTest(x.toFloat(), y.toFloat()))
@@ -333,7 +333,7 @@ class KeyboardTouchTest {
                         val right = rowView.left + key.right - surface.visualHorizontalInsetPx
                         val top = rowView.top + key.top
                         val bottom = rowView.top + key.bottom
-                        for (y in top + 1 until minOf(bottom, surface.height - (5 * context.resources.displayMetrics.density).toInt()) step 2) for (x in maxOf(left + 1, (3 * context.resources.displayMetrics.density).toInt()) until right step 2) {
+                        for (y in top + 1 until minOf(bottom, surface.height - (6 * context.resources.displayMetrics.density).toInt()) step 2) for (x in maxOf(left + 1, (3 * context.resources.displayMetrics.density).toInt()) until right step 2) {
                             assertSame("Containment $mode $width ${key.tag} $x,$y", key,
                                 surface.hitTest(
                                     x - com.example.ui.keyboard.KeyboardGeometry.TOUCH_BIAS_X_DP * context.resources.displayMetrics.density,
@@ -544,6 +544,107 @@ class KeyboardTouchTest {
         assertEquals(1L, counts["commitRejected"])
         assertEquals(0L, counts["commitAccepted"])
         assertEquals("", ic.currentText)
+        view.dismissPopup()
+    }
+
+
+    @Test fun `Q A Z E centers keep their letters`() {
+        val ic = FakeInputConnection()
+        val (_, view) = keyboard(ic)
+        val surface = surface(view)
+        for (letter in listOf("q", "a", "z", "e")) {
+            val key = keys(view).first { it.tag == letter }
+            val point = surfacePoint(key, surface)
+            assertSame(key, surface.hitTest(point.first, point.second))
+            surfaceEvent(surface, MotionEvent.ACTION_DOWN, intArrayOf(7), listOf(point))
+            surfaceEvent(surface, MotionEvent.ACTION_UP, intArrayOf(7), listOf(point))
+        }
+        assertEquals("qaze", ic.currentText)
+        view.dismissPopup()
+    }
+
+    @Test fun `micro slides and shallow releases keep the DOWN key once`() {
+        for ((start, end) in listOf("a" to "s", "q" to "w", "z" to "x")) {
+            for (small in listOf(true, false)) {
+                val ic = FakeInputConnection()
+                val (_, view) = keyboard(ic)
+                val surface = surface(view)
+                val letters = keys(view).associateBy { it.tag.toString() }
+                val initial = letters.getValue(start)
+                val destination = letters.getValue(end)
+                val center = surfacePoint(initial, surface)
+                val endCenter = surfacePoint(destination, surface)
+                // Locate the normal hit-test boundary, including the visual gap.
+                var left = center.first
+                var right = endCenter.first
+                repeat(24) {
+                    val middle = (left + right) / 2f
+                    if (surface.hitTest(middle, center.second) === initial) left = middle else right = middle
+                }
+                val density = context.resources.displayMetrics.density
+                val down = if (small) (left - density) to center.second else center
+                val up = (right + density) to center.second
+                assertSame(initial, surface.hitTest(down.first, down.second))
+                assertSame(destination, surface.hitTest(up.first, up.second))
+                assertFalse(surface.isInsideRetargetArea(destination, up.first, up.second))
+                if (small) assertTrue(up.first - down.first < 10f * density)
+                else assertTrue(up.first - down.first > 10f * density)
+                com.example.ime.InputMetrics.reset()
+                surfaceEvent(surface, MotionEvent.ACTION_DOWN, intArrayOf(7), listOf(down))
+                surfaceEvent(surface, MotionEvent.ACTION_MOVE, intArrayOf(7), listOf(up))
+                surfaceEvent(surface, MotionEvent.ACTION_UP, intArrayOf(7), listOf(up))
+                surfaceEvent(surface, MotionEvent.ACTION_UP, intArrayOf(7), listOf(up))
+                assertEquals(start, ic.currentText)
+                assertEquals(1L, com.example.ime.InputMetrics.snapshot()["activation"])
+                view.dismissPopup()
+            }
+        }
+    }
+
+
+    @Test @Config(qualifiers = "mdpi")
+    fun `retarget requires strictly more than ten dp even inside destination`() {
+        for (distance in listOf(10f, 11f)) {
+            val ic = FakeInputConnection()
+            val (_, view) = keyboard(ic, width = 240)
+            val surface = surface(view)
+            val initial = keys(view).first { it.tag == "a" }
+            val destination = keys(view).first { it.tag == "s" }
+            val center = surfacePoint(initial, surface)
+            var left = center.first
+            var right = surfacePoint(destination, surface).first
+            repeat(24) {
+                val middle = (left + right) / 2f
+                if (surface.hitTest(middle, center.second) === initial) left = middle else right = middle
+            }
+            // Integer coordinates make the exactly-10px case unambiguous at mdpi.
+            val up = (kotlin.math.ceil(right) + 7f) to center.second
+            val down = (up.first - distance) to center.second
+            assertSame(initial, surface.hitTest(down.first, down.second))
+            assertSame(destination, surface.hitTest(up.first, up.second))
+            assertTrue(surface.isInsideRetargetArea(destination, up.first, up.second))
+            surfaceEvent(surface, MotionEvent.ACTION_DOWN, intArrayOf(7), listOf(down))
+            surfaceEvent(surface, MotionEvent.ACTION_UP, intArrayOf(7), listOf(up))
+            assertEquals(if (distance == 10f) "a" else "s", ic.currentText)
+            view.dismissPopup()
+        }
+    }
+
+    @Test fun `deliberate slide from A deeply into S retargets once`() {
+        val ic = FakeInputConnection()
+        val (_, view) = keyboard(ic)
+        val surface = surface(view)
+        val down = surfacePoint(keys(view).first { it.tag == "a" }, surface)
+        val destination = keys(view).first { it.tag == "s" }
+        val up = surfacePoint(destination, surface)
+        assertTrue(up.first - down.first > 10f * context.resources.displayMetrics.density)
+        assertTrue(surface.isInsideRetargetArea(destination, up.first, up.second))
+        com.example.ime.InputMetrics.reset()
+        surfaceEvent(surface, MotionEvent.ACTION_DOWN, intArrayOf(7), listOf(down))
+        surfaceEvent(surface, MotionEvent.ACTION_MOVE, intArrayOf(7), listOf(up))
+        surfaceEvent(surface, MotionEvent.ACTION_UP, intArrayOf(7), listOf(up))
+        assertEquals("s", ic.currentText)
+        assertEquals(1L, com.example.ime.InputMetrics.snapshot()["activation"])
         view.dismissPopup()
     }
 

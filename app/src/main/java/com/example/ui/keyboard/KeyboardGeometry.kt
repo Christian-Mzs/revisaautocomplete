@@ -30,8 +30,8 @@ object KeyboardGeometry {
     const val ACTION_KEY_WEIGHT = 1.5f
     // Reduced symmetric insets widen the nine-letter row while keeping its stagger.
     const val SECOND_ROW_SIDE_INSET_WEIGHT = 0.35f
-    const val TOUCH_BIAS_X_DP = 3f
-    const val TOUCH_BIAS_Y_DP = -5f
+    const val TOUCH_BIAS_X_DP = 0f
+    const val TOUCH_BIAS_Y_DP = -6f
     const val TOOLBAR_HEIGHT_DP = 44
     const val TOOLBAR_BOTTOM_GAP_DP = 6
     const val TOOL_FONT_SP = 13.5f * SCALE

@@ -52,14 +52,14 @@ class KeyboardHitGeometryTest {
         val points = listOf(250f to 79f, 142f to 79f, 358f to 79f,
             250f to 59f, 250f to 95f, 142f to 59f, 358f to 59f,
             142f to 95f, 358f to 95f)
-        points.forEach { (x, y) -> assertSame("space at $x,$y", keys["space"], surface.hitTest(x - 3f, y + 5f)) }
+        points.forEach { (x, y) -> assertSame("space at $x,$y", keys["space"], surface.hitTest(x, y + 6f)) }
     }
 
     @Test fun `lower edges of staggered and wide keys cannot be stolen by bottom row`() {
         val (surface, keys) = fixture()
         for ((name, x) in listOf("x" to 122f, "z" to 113f, "m" to 373f,
             "shift" to 63f, "backspace" to 417f)) {
-            assertSame(name, keys[name], surface.hitTest(x - 3f, 49f))
+            assertSame(name, keys[name], surface.hitTest(x, 50f))
         }
         assertSame(keys[","], surface.hitTest(119f, 61f))
         assertSame(keys["."], surface.hitTest(370f, 61f))
@@ -71,8 +71,8 @@ class KeyboardHitGeometryTest {
         for (reverse in listOf(false, true)) {
             val (surface, keys) = fixture(reverse)
             repeat(10) {
-                assertSame(keys["x"], surface.hitTest(119f, 56f))
-                assertSame(keys[","], surface.hitTest(134.5f, 75f))
+                assertSame(keys["x"], surface.hitTest(122f, 57f))
+                assertSame(keys[","], surface.hitTest(137.5f, 75f))
             }
         }
     }
@@ -91,11 +91,11 @@ class KeyboardHitGeometryTest {
         assertNull(surface.hitTest(0f, Float.POSITIVE_INFINITY))
     }
 
-    @Test fun `bias favors right and upper neighbors near decision boundaries`() {
+    @Test fun `bias preserves horizontal coordinates and favors upper neighbors`() {
         val (surface, keys) = fixture()
-        // Original gap boundary is x=117.5; +3 moves this point to x.
-        assertSame(keys["x"], surface.hitTest(116f, 22f))
-        // Original row boundary is y=51; -5 keeps this point in the upper row.
+        // Original gap boundary remains x=117.5 with no horizontal compensation.
+        assertSame(keys["z"], surface.hitTest(116f, 22f))
+        // Original row boundary is y=51; -6 keeps this point in the upper row.
         assertSame(keys["x"], surface.hitTest(125f, 54f))
         assertSame(keys[","], surface.hitTest(125f, 58f))
     }
@@ -114,11 +114,13 @@ class KeyboardHitGeometryTest {
     fun `bias scales with density`() {
         val (surface, keys) = fixture()
         assertEquals(2f, context.resources.displayMetrics.density, 0f)
-        assertSame(keys["x"], surface.hitTest(113f, 22f))
+        assertSame(keys["z"], surface.hitTest(113f, 22f))
         assertSame(keys["x"], surface.hitTest(125f, 59f))
     }
 
     @Test fun `calibration keeps physical heights separate from existing font scale`() {
+        assertEquals(0f, KeyboardGeometry.TOUCH_BIAS_X_DP, 0f)
+        assertEquals(-6f, KeyboardGeometry.TOUCH_BIAS_Y_DP, 0f)
         assertEquals(45, KeyboardGeometry.KEY_HEIGHT_DP)
         assertEquals(37, KeyboardGeometry.NUMBER_KEY_HEIGHT_DP)
         assertEquals(31.5f, KeyboardGeometry.LETTER_FONT_SP, 0.001f)
@@ -127,3 +129,4 @@ class KeyboardHitGeometryTest {
         assertEquals(12, KeyboardGeometry.KEY_VERTICAL_GAP_DP)
     }
 }
+

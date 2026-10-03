@@ -64,6 +64,19 @@ internal class KeyboardSurfaceView(context: Context) : LinearLayout(context) {
         return nearest?.view
     }
 
+    /** Stricter release-only area; ordinary hit testing still covers every gap. */
+    fun isInsideRetargetArea(key: View, x: Float, y: Float): Boolean {
+        if (!x.isFinite() || !y.isFinite() || x < 0 || y < 0 || x >= width || y >= height) return false
+        val bounds = targets.firstOrNull { it.view === key }?.visualBounds ?: return false
+        val density = resources.displayMetrics.density
+        val adjustedX = x + KeyboardGeometry.TOUCH_BIAS_X_DP * density
+        val adjustedY = y + KeyboardGeometry.TOUCH_BIAS_Y_DP * density
+        val insetX = bounds.width() * 0.15f
+        val insetY = bounds.height() * 0.15f
+        return adjustedX > bounds.left + insetX && adjustedX < bounds.right - insetX &&
+            adjustedY > bounds.top + insetY && adjustedY < bounds.bottom - insetY
+    }
+
     override fun dispatchTouchEvent(event: MotionEvent): Boolean {
         if (!centralized) return super.dispatchTouchEvent(event)
         com.example.ime.InputMetrics.event(event.actionMasked, event.pointerCount)
