@@ -177,6 +177,8 @@ class KeyboardTouchTest {
     @Test fun `clipboard pill remains centered with larger dismiss button at right`() {
         val (controller, view) = keyboard(FakeInputConnection())
         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+        clipboard.clearPrimaryClip()
+        controller.clipboardSuggestion.startSession()
         clipboard.setPrimaryClip(android.content.ClipData.newPlainText("", "Olá mundo"))
         controller.clipboardSuggestion.clipboardChanged()
         view.render()
