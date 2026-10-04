@@ -31,30 +31,32 @@ AndroidX, Kotlin e coroutines continuam sendo dependências Gradle da tela nativ
 
 # Sugestões offline V1
 
-O mecanismo de sugestão é separado da IME e usa somente a biblioteca
-`org.carrot2:morfologik-speller:2.1.9`, licenciada BSD-3-Clause. O texto da
-licença está em `app/src/main/assets/licenses/Morfologik-LICENSE.txt`. A
-biblioteca puxa apenas `morfologik-stemming` e `morfologik-fsa` na mesma versão;
-ambos são BSD-3-Clause. Nenhum código de teclado GPL foi adicionado.
+O motor é Kotlin local, sem biblioteca adicional. Ele carrega somente o arquivo
+do idioma ativo, faz busca de prefixo sobre formas alfabéticas e usa distância
+de edição limitada a dois passos quando faltam candidatos de prefixo. As flags
+de afixo do formato Hunspell são removidas durante a preparação; as formas
+explicitamente presentes permanecem. Não há expansão morfológica automática.
 
-Os dicionários são arquivos Morfologik carregados do idioma ativo; os três
-ficam em `app/src/main/assets/suggestions`:
+Os dados vêm dos arquivos Hunspell distribuídos em
+[`wooorm/dictionaries`](https://github.com/wooorm/dictionaries), derivados dos
+projetos de dicionários que os mantêm. O texto original da licença de cada
+conjunto acompanha o APK em `app/src/main/assets/licenses`:
 
-| Idioma | Arquivo de origem | Licença de código/dados declarada pelo artefato |
+| Idioma | Origem e arquivo | Licença dos dados |
 |---|---|---|
-| pt-BR | `org.languagetool:portuguese-pos-dict:0.1`, `portuguese.dict` + `portuguese.info` | LGPL-2.1; é o FSA de formas portuguesas do artefato POS do LanguageTool |
-| en | `org.languagetool:english-pos-dict:0.1`, `en_US.dict` + `en_US.info` | LGPL-2.1; o arquivo inclui metadados de frequência |
-| es | `org.softcatala:spanish-pos-dict:1.4`, `es-ES.dict` + `es-ES.info` | LGPL-2.1; o arquivo inclui metadados de frequência |
+| pt-BR | VERO, `dictionaries/pt/index.dic` | LGPL-3.0 e MPL; texto da licença preservado |
+| en | SCOWL/en_US, `dictionaries/en/index.dic` | avisos BSD e de outros componentes de origem preservados; arquivo contém os termos completos |
+| es | LibreOffice es_ES, `dictionaries/es/index.dic` | escolha MPL-1.1-or-later da licença tri-licenciada GPL-3.0-or-later/LGPL-3.0-or-later/MPL-1.1-or-later |
 
-A licença do código dos artefatos não substitui a licença dos dados. Os dados
-de frequência presentes em inglês e espanhol são atribuídos pelo LanguageTool
-ao [Mozilla B2G Gaia](https://github.com/mozilla-b2g/gaia/tree/master/apps/keyboard/js/imes/latin/dictionaries)
-e ao Spell On It e estão sob [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
-A atribuição e o link da licença CC BY 4.0 são mantidos aqui; não há dados GPL
-nos três arquivos selecionados. O texto LGPL-2.1 distribuído com o app já está em
-`app/src/main/assets/licenses/LGPL-2.1.txt`.
+O código do mecanismo é original deste projeto; nenhum código GPL foi adicionado.
+Os dados são distintos do código: pt-BR pode ser redistribuído sob LGPL/MPL,
+es foi selecionado sob MPL, e os avisos completos de SCOWL para inglês foram
+incluídos para preservar as atribuições e termos próprios da lista composta.
 
-Os FSA ocupam cerca de 3,72 MB descompactados no APK (pt-BR 850 KB, en 364 KB,
-es 2,49 MB; os metadados `.info` são inferiores a 1 KB). Somente o dicionário
-do idioma consultado fica carregado na memória. Atualizar os arquivos exige
-preservar os avisos acima e revalidar as licenças da versão nova.
+Os arquivos processados ocupam aproximadamente 4,16 MB antes da compressão do
+APK (pt-BR 3,09 MB, en 480 KB, es 590 KB). Só a lista do idioma atual fica em
+memória; a carga é preguiçosa e trocar idioma descarta a referência ao conjunto
+anterior depois de terminar consultas já iniciadas. A lista inclui as formas
+ortográficas armazenadas como entradas na fonte; o motor não deriva outras
+formas a partir das regras de afixo Hunspell.
+

@@ -77,8 +77,6 @@ dependencies {
   implementation(libs.androidx.lifecycle.viewmodel.compose)
   implementation(libs.kotlinx.coroutines.android)
   implementation(libs.kotlinx.coroutines.core)
-  implementation("org.carrot2:morfologik-speller:2.1.9")
-
   testImplementation(libs.androidx.compose.ui.test.junit4)
   testImplementation(libs.androidx.core)
   testImplementation(libs.androidx.junit)
@@ -114,3 +112,4 @@ val verifyRuntimeAssets by tasks.registering {
     }
 }
 tasks.named("preBuild") { dependsOn(verifyRuntimeAssets) }
+

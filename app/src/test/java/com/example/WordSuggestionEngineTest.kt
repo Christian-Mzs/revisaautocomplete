@@ -23,12 +23,15 @@ class WordSuggestionEngineTest {
         val test = engine.suggest("pt-BR", "test")
         assertTrue(test.size in 1..3)
         assertTrue(test.any { it.startsWith("test", true) })
+        assertTrue(engine.suggest("pt-BR", "csa").any { it.equals("casa", true) })
     }
 
     @Test fun `selected language chooses its own dictionary`() {
         val engine = WordSuggestionEngine(context)
         assertTrue(engine.suggest("pt-BR", "cas").any { it.equals("casa", true) })
-        assertTrue(engine.suggest("en", "test").isNotEmpty())
+        assertTrue(engine.suggest("pt-BR", "test").any { it.equals("teste", true) })
+        assertTrue(engine.suggest("en", "test").any { it.equals("tester", true) })
+        assertTrue(engine.suggest("es", "test").any { it.equals("testa", true) })
         assertTrue(engine.suggest("es", "cas").any { it.equals("casa", true) })
         assertTrue(engine.suggest("en", "test", 3).size <= 3)
     }
@@ -47,11 +50,11 @@ class WordSuggestionEngineTest {
 
         val restored = KeyboardLanguagePreferences(context)
         restored.ensureInitialized("en-US") // Must not override the user's saved selection.
-        assertEquals(listOf("es", "pt-BR", "en"), restored.activeLanguages.map { it.code })
-        assertEquals("pt-BR", restored.cycle().code)
+        assertEquals(listOf("pt-BR", "en", "es"), restored.activeLanguages.map { it.code })
         assertEquals("en", restored.cycle().code)
         assertEquals("es", restored.cycle().code)
         assertEquals("pt-BR", restored.cycle().code)
+        assertEquals("en", restored.cycle().code)
         assertTrue(restored.setEnabled("en", false))
         assertTrue(restored.setEnabled("es", false))
         assertFalse(restored.setEnabled("pt-BR", false))
@@ -62,3 +65,4 @@ class WordSuggestionEngineTest {
         assertEquals(listOf("pt-BR", "en", "es"), KeyboardLanguage.AVAILABLE.map { it.code })
     }
 }
+

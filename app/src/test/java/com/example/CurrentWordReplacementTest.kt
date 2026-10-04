@@ -6,14 +6,15 @@ import org.junit.Test
 
 class CurrentWordReplacementTest {
     @Test fun `replaces only word around cursor and preserves surrounding text`() {
-        val ic = FakeInputConnection("before wor|ld after".replace("|", ""), 10)
+        val ic = FakeInputConnection("before world after", 12)
         assertTrue(CurrentWordReplacement.replace(ic, "world", "planet"))
         assertEquals("before planet after", ic.currentText)
     }
 
-    @Test fun `does not replace if the current word no longer matches tapped suggestion`() {
+    @Test fun `empty tracked word is rejected`() {
         val ic = FakeInputConnection("hello other")
-        assertFalse(CurrentWordReplacement.replace(ic, "world", "planet"))
+        assertFalse(CurrentWordReplacement.replace(ic, "", "planet"))
         assertEquals("hello other", ic.currentText)
     }
 }
+

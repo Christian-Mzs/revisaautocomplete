@@ -63,6 +63,7 @@ class KeyboardController(
     private var suggestionRequestId = 0L
     private var suggestionWord: String? = null
     private var suggestionsLanguage: String? = null
+    private var currentWord = ""
     var wordSuggestions: List<String> = emptyList()
         private set
     val typingLanguageCode: String get() = typingLanguagePreferences.currentLanguage.code
@@ -89,11 +90,12 @@ class KeyboardController(
         if (inputConnection !== ic || currentEditorInfo !== editorInfo) cancelAction()
         this.inputConnection = ic
         this.currentEditorInfo = editorInfo
+        currentWord = ""
+        clearWordSuggestions()
         if (uiState !is TextActionUiState.Processing) {
             uiState = TextActionUiState.Idle
         }
         clipboardSuggestion.updateEditor(ic, isSensitiveField)
-        refreshWordSuggestions()
         onStateChanged()
     }
 
@@ -110,6 +112,7 @@ class KeyboardController(
             ShiftState.OFF -> char.lowercase()
         }
         inputConnection?.let { commit(it, textToInsert) }
+        trackTypedText(textToInsert)
 
         if (shiftState == ShiftState.ON) {
             shiftState = ShiftState.OFF
@@ -120,12 +123,12 @@ class KeyboardController(
     fun handleDirectCharacter(char: String) {
         InputMetrics.direct()
         inputConnection?.let { commit(it, char) }
+        trackTypedText(char)
     }
 
     private fun commit(ic: InputConnection, text: String) {
         InputMetrics.commit()
         InputMetrics.commitResult(ic.commitText(text, 1))
-        refreshWordSuggestions()
     }
 
     fun handleBackspace() {
@@ -133,6 +136,7 @@ class KeyboardController(
         val selected = ic.getSelectedText(0)
         if (!selected.isNullOrEmpty()) {
             commit(ic, "")
+            currentWord = ""
         } else {
             val before = if (isSensitiveField) null else ic.getTextBeforeCursor(64, 0)?.toString()
             if (before == null) {
@@ -148,12 +152,18 @@ class KeyboardController(
                     ic.deleteSurroundingText(length, 0)
                 }
             }
+            if (currentWord.isNotEmpty()) {
+                val lastCodePointStart = currentWord.offsetByCodePoints(currentWord.length, -1)
+                currentWord = currentWord.substring(0, lastCodePointStart)
+            }
         }
         refreshWordSuggestions()
     }
 
     fun handleSpace() {
         inputConnection?.let { commit(it, " ") }
+        currentWord = ""
+        refreshWordSuggestions()
     }
 
     fun cycleTypingLanguage() {
@@ -165,29 +175,34 @@ class KeyboardController(
 
     fun selectWordSuggestion(word: String) {
         val current = suggestionWord ?: return
+        if (current != currentWord) return
         if (!SensitiveFieldDetector.allowsWordSuggestions(currentEditorInfo)) return
         if (CurrentWordReplacement.replace(inputConnection, current, word)) {
+            currentWord = word
             clearWordSuggestions()
             refreshWordSuggestions()
         }
     }
 
+    private fun trackTypedText(text: String) {
+        if (text.isNotEmpty() && text.all { it.isLetter() ||
+                Character.getType(it) == Character.NON_SPACING_MARK.toInt() ||
+                Character.getType(it) == Character.COMBINING_SPACING_MARK.toInt() }) {
+            currentWord += text
+        } else {
+            currentWord = ""
+        }
+        refreshWordSuggestions()
+    }
+
     private fun refreshWordSuggestions() {
         val ic = inputConnection
         val editor = currentEditorInfo
-        if (ic == null || !SensitiveFieldDetector.allowsWordSuggestions(editor) ||
-            ic.getSelectedText(0)?.isNotEmpty() == true) {
+        if (ic == null || currentWord.isBlank() || !SensitiveFieldDetector.allowsWordSuggestions(editor)) {
             clearWordSuggestions()
             return
         }
-
-        val before = ic.getTextBeforeCursor(80, 0)?.toString()
-        val word = before?.takeLastWhile(::isWordCharacter)
-        if (word.isNullOrBlank()) {
-            clearWordSuggestions()
-            return
-        }
-
+        val word = currentWord
         val language = typingLanguageCode
         if (suggestionWord == word && suggestionsLanguage == language && suggestionJob?.isActive == true) return
         suggestionRequestId++
@@ -197,7 +212,9 @@ class KeyboardController(
         suggestionsLanguage = language
         wordSuggestions = emptyList()
         suggestionJob = coroutineScope.launch {
-            val results = withContext(Dispatchers.Default) { wordSuggestionEngine.suggest(language, word) }
+            val results = runCatching {
+                withContext(Dispatchers.Default) { wordSuggestionEngine.suggest(language, word) }
+            }.getOrDefault(emptyList())
             if (requestId == suggestionRequestId && inputConnection === ic && currentEditorInfo === editor &&
                 typingLanguageCode == language && suggestionWord == word &&
                 SensitiveFieldDetector.allowsWordSuggestions(currentEditorInfo)) {
@@ -219,10 +236,6 @@ class KeyboardController(
         }
     }
 
-    private fun isWordCharacter(char: Char): Boolean = char.isLetter() ||
-        Character.getType(char) == Character.NON_SPACING_MARK.toInt() ||
-        Character.getType(char) == Character.COMBINING_SPACING_MARK.toInt()
-
     fun handleEnter() {
         val ic = inputConnection ?: return
         val editorInfo = currentEditorInfo
@@ -232,10 +245,14 @@ class KeyboardController(
             if (action != EditorInfo.IME_ACTION_NONE && action != EditorInfo.IME_ACTION_UNSPECIFIED) {
                 InputMetrics.editorAction()
                 ic.performEditorAction(action)
+                currentWord = ""
+                refreshWordSuggestions()
                 return
             }
         }
         commit(ic, "\n")
+        currentWord = ""
+        refreshWordSuggestions()
     }
 
     fun getActionKeyType(): ActionKeyType {
@@ -452,3 +469,4 @@ class KeyboardController(
         onStateChanged()
     }
 }
+

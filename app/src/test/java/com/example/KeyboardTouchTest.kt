@@ -154,19 +154,20 @@ class KeyboardTouchTest {
         view.dismissPopup()
     }
 
-    @Test fun `idle toolbar contains only fixed tools and survives typing`() {
+    @Test fun `idle toolbar exposes the typing language and survives typing`() {
         val ic = FakeInputConnection()
         val (_, view) = keyboard(ic)
         val toolbar = (view.getChildAt(0) as FrameLayout).getChildAt(0) as LinearLayout
         view.measure(View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY),
             View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED))
         view.layout(0, 0, view.measuredWidth, view.measuredHeight)
-        assertEquals(5, toolbar.childCount)
+        assertEquals(6, toolbar.childCount)
         val widths = (0 until toolbar.childCount).map { toolbar.getChildAt(it).width }
         assertTrue(widths.max() - widths.min() <= 1)
         val labels = (0 until toolbar.childCount).map { toolbar.getChildAt(it).contentDescription?.toString() }
         assertTrue(labels.contains(context.getString(R.string.correct_action)))
         assertTrue(labels.contains(context.getString(R.string.translate_action)))
+        assertTrue(labels.any { it?.startsWith("Idioma ") == true && it.contains("Alternar idioma") })
         val key = keys(view).first { it.tag == "t" }
         touch(key, MotionEvent.ACTION_DOWN)
         touch(key, MotionEvent.ACTION_UP)
@@ -713,4 +714,5 @@ class KeyboardTouchTest {
     }
 
 }
+
 
