@@ -104,9 +104,12 @@ class KeyboardLanguagePreferences(context: Context) {
             val subtypeLocale = if (Build.VERSION.SDK_INT >= 28) runCatching {
                 imm?.lastInputMethodSubtype?.locale
             }.getOrNull() else null
-            val systemLocale = if (Build.VERSION.SDK_INT >= 24) LocaleList.getDefault().get(0)?.toLanguageTag()
-                else Locale.getDefault().toLanguageTag()
+            val systemLocale = if (Build.VERSION.SDK_INT >= 24) {
+                LocaleList.getDefault().takeIf { !it.isEmpty }?.get(0)?.toLanguageTag()
+                    ?: Locale.getDefault().toLanguageTag()
+            } else Locale.getDefault().toLanguageTag()
             return subtypeLocale?.takeIf(String::isNotBlank) ?: systemLocale
         }
     }
 }
+
