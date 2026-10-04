@@ -15,23 +15,35 @@ import org.robolectric.annotation.Config
 class WordSuggestionEngineTest {
     private val context get() = ApplicationProvider.getApplicationContext<android.content.Context>()
 
-    @Test fun `Portuguese accents and prefixes complete from Portuguese dataset`() {
+    @Test fun `Portuguese ranks common surface forms and corrects missing accents`() {
         val engine = WordSuggestionEngine(context)
-        assertTrue(engine.suggest("pt-BR", "nao").any { it.equals("não", true) })
-        assertTrue(engine.suggest("pt-BR", "voce").any { it.equals("você", true) })
-        assertTrue(engine.suggest("pt-BR", "onib").any { it.equals("ônibus", true) })
+
+        assertEquals("não", engine.suggest("pt-BR", "nao").first())
+        assertEquals(listOf("não"), engine.suggest("pt-BR", "nao"))
+        assertEquals("você", engine.suggest("pt-BR", "voce").first())
+        assertEquals("ônibus", engine.suggest("pt-BR", "onib").first())
+        assertEquals("ônibus", engine.suggest("pt-BR", "oni").first())
+
+        val shortPrefix = engine.suggest("pt-BR", "na")
+        assertEquals(listOf("não", "nada", "nas"), shortPrefix)
+        assertFalse(shortPrefix.any { it.equals("nabi", true) || it.equals("naã", true) })
+
+        val acredit = engine.suggest("pt-BR", "acredit")
+        assertEquals(listOf("acredito", "acreditar", "acredita"), acredit)
+        assertFalse(acredit.any { it.equals("acreditivo", true) || it.equals("acreditação", true) })
+
         val test = engine.suggest("pt-BR", "test")
+        assertEquals("teste", test.first())
         assertTrue(test.size in 1..3)
-        assertTrue(test.any { it.startsWith("test", true) })
         assertTrue(engine.suggest("pt-BR", "csa").any { it.equals("casa", true) })
+        assertTrue(engine.suggest("pt-BR", "cas").any { it.equals("casamento", true) })
     }
 
-    @Test fun `selected language chooses its own dictionary`() {
+    @Test fun `selected language chooses its own frequency list`() {
         val engine = WordSuggestionEngine(context)
-        assertTrue(engine.suggest("pt-BR", "cas").any { it.equals("casa", true) })
         assertTrue(engine.suggest("pt-BR", "test").any { it.equals("teste", true) })
-        assertTrue(engine.suggest("en", "test").any { it.equals("tester", true) })
-        assertTrue(engine.suggest("es", "test").any { it.equals("testa", true) })
+        assertTrue(engine.suggest("en", "test").any { it.equals("testing", true) })
+        assertTrue(engine.suggest("es", "test").any { it.equals("testigo", true) })
         assertTrue(engine.suggest("es", "cas").any { it.equals("casa", true) })
         assertTrue(engine.suggest("en", "test", 3).size <= 3)
     }
@@ -65,4 +77,3 @@ class WordSuggestionEngineTest {
         assertEquals(listOf("pt-BR", "en", "es"), KeyboardLanguage.AVAILABLE.map { it.code })
     }
 }
-

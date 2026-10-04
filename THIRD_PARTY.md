@@ -31,32 +31,34 @@ AndroidX, Kotlin e coroutines continuam sendo dependências Gradle da tela nativ
 
 # Sugestões offline V1
 
-O motor é Kotlin local, sem biblioteca adicional. Ele carrega somente o arquivo
-do idioma ativo, faz busca de prefixo sobre formas alfabéticas e usa distância
-de edição limitada a dois passos quando faltam candidatos de prefixo. As flags
-de afixo do formato Hunspell são removidas durante a preparação; as formas
-explicitamente presentes permanecem. Não há expansão morfológica automática.
+O mecanismo é Kotlin puro, sem nova dependência. Cada idioma usa um arquivo
+com formas de palavras e contagens de frequência. O motor carrega apenas o
+arquivo do idioma ativo, ordena prefixos por frequência e usa distância de
+edição limitada a dois passos somente quando não há resultado por prefixo.
+A comparação ignora diacríticos para corrigir formas como `nao` para `não`.
+A substituição continua dependendo do toque explícito em uma sugestão.
 
-Os dados vêm dos arquivos Hunspell distribuídos em
-[`wooorm/dictionaries`](https://github.com/wooorm/dictionaries), derivados dos
-projetos de dicionários que os mantêm. O texto original da licença de cada
-conjunto acompanha o APK em `app/src/main/assets/licenses`:
+As listas vêm de `FrequencyWords`, arquivos de 50 mil formas do
+OpenSubtitles 2018:
 
-| Idioma | Origem e arquivo | Licença dos dados |
-|---|---|---|
-| pt-BR | VERO, `dictionaries/pt/index.dic` | LGPL-3.0 e MPL; texto da licença preservado |
-| en | SCOWL/en_US, `dictionaries/en/index.dic` | avisos BSD e de outros componentes de origem preservados; arquivo contém os termos completos |
-| es | LibreOffice es_ES, `dictionaries/es/index.dic` | escolha MPL-1.1-or-later da licença tri-licenciada GPL-3.0-or-later/LGPL-3.0-or-later/MPL-1.1-or-later |
+| Idioma | Arquivo de origem |
+|---|---|
+| pt-BR | `content/2018/pt/pt_50k.txt` |
+| en | `content/2018/en/en_50k.txt` |
+| es | `content/2018/es/es_50k.txt` |
 
-O código do mecanismo é original deste projeto; nenhum código GPL foi adicionado.
-Os dados são distintos do código: pt-BR pode ser redistribuído sob LGPL/MPL,
-es foi selecionado sob MPL, e os avisos completos de SCOWL para inglês foram
-incluídos para preservar as atribuições e termos próprios da lista composta.
+Origem fixada em
+[`hermitdave/FrequencyWords` no commit `525f9b5`](https://github.com/hermitdave/FrequencyWords/tree/525f9b560de45753a5ea01069454e72e9aa541c6/content/2018).
+O upstream declara o **código** sob MIT e o **conteúdo** sob CC BY-SA 4.0.
+Nenhum código do projeto upstream foi incorporado. Os arquivos processados
+são derivados do conteúdo e continuam sob CC BY-SA 4.0; atribuição, licença
+e descrição das alterações acompanham o APK em
+`app/src/main/assets/licenses/FrequencyWords-NOTICE.txt`. Essa licença se
+aplica aos dados, sem relicenciar o código do Revisa.
 
-Os arquivos processados ocupam aproximadamente 4,16 MB antes da compressão do
-APK (pt-BR 3,09 MB, en 480 KB, es 590 KB). Só a lista do idioma atual fica em
-memória; a carga é preguiçosa e trocar idioma descarta a referência ao conjunto
-anterior depois de terminar consultas já iniciadas. A lista inclui as formas
-ortográficas armazenadas como entradas na fonte; o motor não deriva outras
-formas a partir das regras de afixo Hunspell.
-
+As listas incluídas foram filtradas para palavras de 2 a 24 letras Unicode,
+convertidas para minúsculas e mantidas em ordem decrescente de contagem. As
+contagens foram preservadas. Depois do filtro, os arquivos ocupam cerca de
+1,80 MB sem compressão (pt-BR 566 KB, en 584 KB, es 654 KB), abaixo dos 4,16 MB
+das listas anteriores. Todos os três idiomas seguem disponíveis offline, mas
+somente o idioma ativo fica carregado em memória.

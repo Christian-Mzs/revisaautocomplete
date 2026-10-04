@@ -1,0 +1,23 @@
+FrequencyWords — atribuição dos dados de sugestões
+
+Fonte dos dados: Hermit Dave, FrequencyWords, listas de frequência derivadas
+do corpus OpenSubtitles 2018:
+https://github.com/hermitdave/FrequencyWords/tree/525f9b560de45753a5ea01069454e72e9aa541c6/content/2018
+
+Arquivos de origem:
+- pt-BR: content/2018/pt/pt_50k.txt
+- en: content/2018/en/en_50k.txt
+- es: content/2018/es/es_50k.txt
+
+Licença do conteúdo: Creative Commons Attribution-ShareAlike 4.0 International
+(CC BY-SA 4.0):
+https://creativecommons.org/licenses/by-sa/4.0/
+
+Alterações: tokens que não são formados somente por letras Unicode foram
+removidos, palavras com menos de 2 ou mais de 24 letras foram removidas,
+as palavras foram convertidas para minúsculas e as contagens de origem foram
+preservadas. Os arquivos resultantes continuam sob CC BY-SA 4.0.
+
+Esta licença se aplica somente aos dados FrequencyWords distribuídos em
+app/src/main/assets/suggestions/. Nenhum código do projeto FrequencyWords foi
+incorporado; a licença dos dados não altera a licença do código do Revisa.

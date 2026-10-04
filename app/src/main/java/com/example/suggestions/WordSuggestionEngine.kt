@@ -4,13 +4,14 @@ import android.content.Context
 import java.text.Normalizer
 import java.util.Locale
 
-/** Offline prefix completion and bounded edit-distance correction, isolated from IME editing. */
+/** Offline frequency-ranked completion and bounded correction, isolated from IME editing. */
 class WordSuggestionEngine(private val context: Context) {
-    private data class Entry(val folded: String, val word: String)
+    private data class Entry(val folded: String, val word: String, val frequency: Long)
     private data class Loaded(
         val language: String,
         val entries: List<Entry>,
-        val byLength: Map<Int, List<Entry>>
+        val byLength: Map<Int, List<Entry>>,
+        val byPrefix: Map<String, List<Entry>>
     )
 
     @Volatile private var loaded: Loaded? = null
@@ -22,25 +23,38 @@ class WordSuggestionEngine(private val context: Context) {
             loaded?.takeIf { it.language == language.code } ?: load(language).also { loaded = it }
         }
         val query = fold(input)
-        val suggestions = LinkedHashSet<String>()
 
-        // Prefix completions come first, with shorter forms ranked ahead of longer ones.
-        val prefixMatches = ArrayList<Entry>()
-        var index = lowerBound(data.entries, query)
-        while (index < data.entries.size && data.entries[index].folded.startsWith(query) && prefixMatches.size < PREFIX_SCAN_LIMIT) {
-            val candidate = data.entries[index++]
-            if (!candidate.word.equals(input, ignoreCase = true)) prefixMatches += candidate
+        // A common accentless form such as "nao" should resolve directly to its
+        // more frequent correctly accented spelling, without filling the row
+        // with unrelated words that happen to share the same folded prefix.
+        val prefixCandidates = data.byPrefix[query.take(PREFIX_INDEX_LENGTH)].orEmpty()
+        val foldedExact = prefixCandidates.firstOrNull { it.folded == query }
+        if (foldedExact != null &&
+            !foldedExact.word.equals(input, ignoreCase = true) &&
+            diacriticCount(foldedExact.word) > diacriticCount(input)
+        ) {
+            return listOf(matchCase(input, foldedExact.word)).take(limit)
         }
-        prefixMatches.sortedWith(compareBy<Entry>({ it.word.length }, { it.folded }, { it.word }))
-            .take(limit).forEach { suggestions += matchCase(input, it.word) }
 
-        // Use a small, language-neutral edit distance only when prefix completion has gaps.
-        if (suggestions.size < limit && input.length >= MIN_CORRECTION_LENGTH) {
+        val suggestions = LinkedHashSet<String>()
+        val seenFolded = HashSet<String>()
+
+        // Entries are stored in descending source frequency, so the first three
+        // prefix matches are the most common candidates for the active language.
+        for (candidate in prefixCandidates) {
+            if (!candidate.folded.startsWith(query) || candidate.folded == query) continue
+            if (!seenFolded.add(candidate.folded)) continue
+            suggestions += matchCase(input, candidate.word)
+            if (suggestions.size == limit) break
+        }
+
+        // Fuzzy correction only fills an otherwise empty prefix result. This
+        // avoids appending weak edit-distance guesses to useful completions.
+        if (suggestions.isEmpty() && input.length >= MIN_CORRECTION_LENGTH) {
             val corrections = ArrayList<Correction>()
             for (length in (query.length - MAX_EDIT_DISTANCE).coerceAtLeast(1)..(query.length + MAX_EDIT_DISTANCE)) {
                 for (candidate in data.byLength[length].orEmpty()) {
-                    if (candidate.folded.length < MIN_CORRECTION_LENGTH ||
-                        candidate.word.equals(input, ignoreCase = true) || candidate.folded == query) continue
+                    if (candidate.word.equals(input, ignoreCase = true) || candidate.folded == query) continue
                     val distance = optimalStringAlignment(query, candidate.folded, MAX_EDIT_DISTANCE)
                     if (distance in 1..MAX_EDIT_DISTANCE) {
                         val preservesOrder = isSubsequence(query, candidate.folded) || isSubsequence(candidate.folded, query)
@@ -49,9 +63,15 @@ class WordSuggestionEngine(private val context: Context) {
                 }
             }
             corrections.sortedWith(compareBy<Correction>(
-                { it.distance }, { !it.preservesOrder }, { commonPrefixLength(query, it.entry.folded) * -1 },
-                { it.entry.word.length }, { it.entry.word.lowercase(Locale.ROOT) }
+                { it.distance },
+                { -it.entry.frequency },
+                { !it.preservesOrder },
+                { -commonPrefixLength(query, it.entry.folded) },
+                { it.entry.word.length },
+                { it.entry.word.lowercase(Locale.ROOT) }
             ))
+                .distinctBy { it.entry.folded }
+                .take(limit)
                 .forEach { suggestions += matchCase(input, it.entry.word) }
         }
         return suggestions.take(limit)
@@ -70,27 +90,27 @@ class WordSuggestionEngine(private val context: Context) {
         val entries = ArrayList<Entry>()
         context.assets.open("suggestions/${language.assetName}.txt").bufferedReader(Charsets.UTF_8).useLines { lines ->
             lines.forEach { line ->
-                val word = line.trim()
-                if (word.length in 2..MAX_WORD_LENGTH && word.all(Char::isLetter)) {
-                    entries += Entry(fold(word), word)
+                val separator = line.lastIndexOf('\t')
+                if (separator <= 0) return@forEach
+                val word = line.substring(0, separator).trim()
+                val frequency = line.substring(separator + 1).trim().toLongOrNull() ?: return@forEach
+                if (word.length in 2..MAX_WORD_LENGTH && word.all(Char::isLetter) && frequency > 0) {
+                    entries += Entry(fold(word), word, frequency)
                 }
             }
         }
-        entries.sortWith(compareBy<Entry>({ it.folded }, { it.word.length }, { it.word }))
+        entries.sortWith(
+            compareByDescending<Entry> { it.frequency }
+                .thenBy { it.folded }
+                .thenBy { it.word }
+        )
         val byLength = HashMap<Int, MutableList<Entry>>()
-        entries.forEach { entry -> byLength.getOrPut(entry.folded.length) { ArrayList() } += entry
+        val byPrefix = HashMap<String, MutableList<Entry>>()
+        entries.forEach { entry ->
+            byLength.getOrPut(entry.folded.length) { ArrayList() } += entry
+            byPrefix.getOrPut(entry.folded.take(PREFIX_INDEX_LENGTH)) { ArrayList() } += entry
         }
-        return Loaded(language.code, entries, byLength)
-    }
-
-    private fun lowerBound(entries: List<Entry>, query: String): Int {
-        var low = 0
-        var high = entries.size
-        while (low < high) {
-            val middle = (low + high) ushr 1
-            if (entries[middle].folded < query) low = middle + 1 else high = middle
-        }
-        return low
+        return Loaded(language.code, entries, byLength, byPrefix)
     }
 
     private fun optimalStringAlignment(left: String, right: String, cutoff: Int): Int {
@@ -127,6 +147,10 @@ class WordSuggestionEngine(private val context: Context) {
         return length
     }
 
+    private fun diacriticCount(value: String): Int =
+        Normalizer.normalize(value, Normalizer.Form.NFD)
+            .count { Character.getType(it) == Character.NON_SPACING_MARK.toInt() }
+
     private fun matchCase(input: String, candidate: String): String =
         if (input.firstOrNull()?.isUpperCase() == true) candidate.replaceFirstChar { it.titlecase(Locale.ROOT) } else candidate
 
@@ -135,10 +159,9 @@ class WordSuggestionEngine(private val context: Context) {
         .let { Normalizer.normalize(it, Normalizer.Form.NFC) }
 
     companion object {
-        private const val PREFIX_SCAN_LIMIT = 256
         private const val MAX_EDIT_DISTANCE = 2
         private const val MIN_CORRECTION_LENGTH = 3
         private const val MAX_WORD_LENGTH = 24
+        private const val PREFIX_INDEX_LENGTH = 2
     }
 }
-
