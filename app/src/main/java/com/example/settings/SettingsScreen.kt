@@ -39,6 +39,8 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.R
+import com.example.suggestions.KeyboardLanguage
+import com.example.suggestions.KeyboardLanguagePreferences
 
 @Composable
 fun SettingsScreen(isImeEnabled: Boolean, isImeSelected: Boolean, onRefreshImeStatus: () -> Unit,
@@ -46,16 +48,21 @@ fun SettingsScreen(isImeEnabled: Boolean, isImeSelected: Boolean, onRefreshImeSt
     val context = LocalContext.current
     val preferences = remember { OnboardingPreferences(context) }
     val languages = remember { LanguagePreferences(context) }
+    val typingLanguages = remember { KeyboardLanguagePreferences(context).apply {
+        ensureInitialized(KeyboardLanguagePreferences.systemLanguage(context))
+    } }
     var showOnboarding by rememberSaveable { mutableStateOf(!preferences.completed) }
     var replay by rememberSaveable { mutableStateOf(false) }
     var path by rememberSaveable { mutableStateOf(listOf("home")) }
     var enabledCodes by remember { mutableStateOf(languages.translationLanguages.map { it.languageCode }.toSet()) }
+    var activeTypingCodes by remember { mutableStateOf(typingLanguages.activeLanguages.map { it.code }.toSet()) }
     val owner = LocalLifecycleOwner.current
     DisposableEffect(owner, showOnboarding) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
                 onRefreshImeStatus()
                 enabledCodes = languages.translationLanguages.map { it.languageCode }.toSet()
+                activeTypingCodes = typingLanguages.activeLanguages.map { it.code }.toSet()
                 if (!showOnboarding) account.refresh()
             }
         }
@@ -88,6 +95,10 @@ fun SettingsScreen(isImeEnabled: Boolean, isImeSelected: Boolean, onRefreshImeSt
                     account.browserIntent()?.let { intent ->
                         runCatching { context.startActivity(intent) }.onFailure { account.browserUnavailable() }
                     }
+                }, typingLanguageCodes = activeTypingCodes, onTypingLanguage = { code, checked ->
+                    val changed = typingLanguages.setEnabled(code, checked)
+                    activeTypingCodes = typingLanguages.activeLanguages.map { it.code }.toSet()
+                    changed
                 })
         }
     }
@@ -100,7 +111,8 @@ internal fun RevisaMenuScreen(
     languageCodes: Set<String>, onNavigate: (String) -> Unit, onBack: () -> Unit,
     onEnable: () -> Unit, onSelect: () -> Unit, onReplay: () -> Unit,
     onLanguage: (String, Boolean) -> Boolean, onLogin: () -> Unit, onCancel: () -> Unit,
-    onLogout: () -> Unit, onBrowser: () -> Unit
+    onLogout: () -> Unit, onBrowser: () -> Unit,
+    typingLanguageCodes: Set<String> = emptySet(), onTypingLanguage: (String, Boolean) -> Boolean = { _, _ -> false }
 ) {
     val scroll = remember(page) { ScrollState(0) }
     Box(Modifier.fillMaxSize().background(Color(0xFF090C12)), contentAlignment = Alignment.TopCenter) {
@@ -147,6 +159,13 @@ internal fun RevisaMenuScreen(
                                 Copy("Escolha quais idiomas aparecem quando você toca em Traduzir.", size = 12.sp, color = RevisaColors.Muted)
                                 MenuRow("Gerenciar idiomas", "${languageCodes.size} idiomas selecionados") { onNavigate("languages") }
                             }
+                            Spacer(Modifier.height(14.dp))
+                            RevisaCard {
+                                Heading("Idiomas do teclado", 21.sp)
+                                Spacer(Modifier.height(10.dp))
+                                Copy("Escolha e alterne os idiomas usados para sugerir palavras.", size = 12.sp, color = RevisaColors.Muted)
+                                MenuRow("Gerenciar idiomas", "${typingLanguageCodes.size} ativos") { onNavigate("typing-languages") }
+                            }
                             Spacer(Modifier.height(18.dp))
                         }
                         "settings" -> {
@@ -166,6 +185,7 @@ internal fun RevisaMenuScreen(
                             KeyboardSetupCard(enabled, selected, onEnable, onSelect)
                         }
                         "languages" -> LanguageSettingsPage(languageCodes, onLanguage)
+                        "typing-languages" -> TypingLanguageSettingsPage(typingLanguageCodes, onTypingLanguage)
                         "help" -> HelpPage()
                         "privacy" -> PrivacyPage()
                     }

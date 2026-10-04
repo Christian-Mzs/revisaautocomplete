@@ -188,7 +188,8 @@ class KeyboardLayoutView(
     // TOOLBAR RENDERING (Corrigir | Traduzir | Switch IME)
     // -------------------------------------------------------------
     private fun renderToolbar() {
-        val snapshot = listOf(controller.uiState, controller.isSensitiveField, controller.clipboardSuggestion.suggestion, controller.currentMode)
+        val snapshot = listOf(controller.uiState, controller.isSensitiveField, controller.clipboardSuggestion.suggestion,
+            controller.currentMode, controller.wordSuggestions, controller.typingLanguageCode)
         if (snapshot == renderedToolbar) return
         renderedToolbar = snapshot
         toolbarContainer.removeAllViews()
@@ -205,6 +206,10 @@ class KeyboardLayoutView(
     }
 
     private fun renderIdleToolbar() {
+        if (controller.currentMode == KeyboardMode.LETTERS && controller.wordSuggestions.isNotEmpty()) {
+            renderWordSuggestions()
+            return
+        }
         controller.clipboardSuggestion.suggestion?.let {
             renderClipboardSuggestion(it)
             return
@@ -264,7 +269,44 @@ class KeyboardLayoutView(
                 renderKeys()
             }
         })
+        row.addView(toolbarText(controller.typingLanguageCode.take(2).uppercase(), G.TOOL_FONT_SP - 1f).apply {
+            contentDescription = "Idioma ${controller.typingLanguageCode}. Alternar idioma"
+            setOnClickListener {
+                it.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                controller.cycleTypingLanguage()
+            }
+        })
         row.addView(switch)
+        toolbarContainer.addView(row)
+    }
+
+    private fun renderWordSuggestions() {
+        val row = LinearLayout(context).apply {
+            orientation = HORIZONTAL
+            isMotionEventSplittingEnabled = true
+            gravity = Gravity.CENTER_VERTICAL
+            layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, dpToPx(G.TOOLBAR_HEIGHT_DP))
+        }
+        row.addView(toolbarText(controller.typingLanguageCode.take(2).uppercase(), G.TOOL_FONT_SP - 1f).apply {
+            layoutParams = LayoutParams(dpToPx(42), LayoutParams.MATCH_PARENT)
+            contentDescription = "Idioma ${controller.typingLanguageCode}. Alternar idioma"
+            setTextColor(primaryActionColor)
+            typeface = Typeface.DEFAULT_BOLD
+            setOnClickListener {
+                it.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                controller.cycleTypingLanguage()
+            }
+        })
+        controller.wordSuggestions.take(3).forEach { suggestion ->
+            row.addView(toolbarText(suggestion).apply {
+                layoutParams = LayoutParams(0, LayoutParams.MATCH_PARENT, 1f)
+                contentDescription = "Usar sugestão $suggestion"
+                setOnClickListener {
+                    it.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                    controller.selectWordSuggestion(suggestion)
+                }
+            })
+        }
         toolbarContainer.addView(row)
     }
 

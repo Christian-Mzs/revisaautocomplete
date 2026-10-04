@@ -8,12 +8,12 @@ android {
   compileSdk { version = release(36) { minorApiLevel = 1 } }
 
   defaultConfig {
-    applicationId = "com.aistudio.corretorteclado.vkmzqp"
+    applicationId = "com.aistudio.corretorteclado.revisaautocomplete"
     minSdk = 26
     ndk { abiFilters += "arm64-v8a" }
     targetSdk = 36
     versionCode = 2
-    versionName = "1.1-codex"
+    versionName = "1.1-autocomplete-v1"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
@@ -77,6 +77,7 @@ dependencies {
   implementation(libs.androidx.lifecycle.viewmodel.compose)
   implementation(libs.kotlinx.coroutines.android)
   implementation(libs.kotlinx.coroutines.core)
+  implementation("org.carrot2:morfologik-speller:2.1.9")
 
   testImplementation(libs.androidx.compose.ui.test.junit4)
   testImplementation(libs.androidx.core)

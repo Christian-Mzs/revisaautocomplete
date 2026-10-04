@@ -66,4 +66,24 @@ class SensitiveFieldDetectorTest {
     fun `null editorInfo returns false`() {
         assertFalse(SensitiveFieldDetector.isSensitive(null))
     }
+
+    @Test
+    fun `word suggestions are suppressed for fields which disallow them`() {
+        val ordinaryText = EditorInfo().apply { inputType = InputType.TYPE_CLASS_TEXT }
+        assertTrue(SensitiveFieldDetector.allowsWordSuggestions(ordinaryText))
+
+        val noSuggestions = EditorInfo().apply {
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
+        }
+        assertFalse(SensitiveFieldDetector.allowsWordSuggestions(noSuggestions))
+
+        val password = EditorInfo().apply {
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+        }
+        assertFalse(SensitiveFieldDetector.allowsWordSuggestions(password))
+
+        val numeric = EditorInfo().apply { inputType = InputType.TYPE_CLASS_NUMBER }
+        assertFalse(SensitiveFieldDetector.allowsWordSuggestions(numeric))
+        assertFalse(SensitiveFieldDetector.allowsWordSuggestions(null))
+    }
 }

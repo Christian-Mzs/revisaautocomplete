@@ -34,4 +34,17 @@ object SensitiveFieldDetector {
 
         return false
     }
+
+    /** True only for ordinary text editors where the app explicitly permits suggestions. */
+    fun allowsWordSuggestions(editorInfo: EditorInfo?): Boolean {
+        if (editorInfo == null || isSensitive(editorInfo)) return false
+        val inputType = editorInfo.inputType
+        if ((inputType and InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS) != 0) return false
+        if ((inputType and InputType.TYPE_MASK_CLASS) != InputType.TYPE_CLASS_TEXT) return false
+        val variation = inputType and InputType.TYPE_MASK_VARIATION
+        return variation != InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS &&
+            variation != InputType.TYPE_TEXT_VARIATION_WEB_EMAIL_ADDRESS &&
+            variation != InputType.TYPE_TEXT_VARIATION_URI &&
+            variation != InputType.TYPE_TEXT_VARIATION_FILTER
+    }
 }
