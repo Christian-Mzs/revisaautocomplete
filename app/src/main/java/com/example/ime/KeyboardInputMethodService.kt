@@ -22,8 +22,9 @@ class KeyboardInputMethodService : android.inputmethodservice.InputMethodService
     private var keyboardLayoutView: KeyboardLayoutView? = null
 
     private val clipboardListener = android.content.ClipboardManager.OnPrimaryClipChangedListener {
-        keyboardController.clipboardSuggestion.clipboardChanged()
-        if (!keyboardController.isSensitiveField) {
+        if (keyboardController.clipboardSuggestion.clipboardChanged() &&
+            !keyboardController.isSensitiveField
+        ) {
             keyboardController.clipboardHistory.capture()
             keyboardLayoutView?.refreshClipboard()
         }
@@ -73,10 +74,10 @@ class KeyboardInputMethodService : android.inputmethodservice.InputMethodService
     override fun onStartInputView(info: EditorInfo?, restarting: Boolean) {
         super.onStartInputView(info, restarting)
         Log.d(TAG, "onStartInputView: pkg=${info?.packageName}, inputType=${info?.inputType}, restarting=$restarting")
+        keyboardController.clipboardSuggestion.startSession()
         keyboardController.updateInputConnection(currentInputConnection, info)
         keyboardController.setMode(KeyboardMode.LETTERS)
         keyboardLayoutView?.resetNavigation()
-        if (!keyboardController.isSensitiveField) keyboardController.clipboardHistory.capture()
         keyboardLayoutView?.render()
     }
 

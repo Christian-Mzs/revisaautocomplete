@@ -2,9 +2,7 @@ package com.example.clipboard
 
 import android.content.ClipboardManager
 import android.content.Context
-import android.os.Build
 import android.view.inputmethod.InputConnection
-import java.security.MessageDigest
 
 data class ClipboardSuggestion(val identity: String, val text: String)
 
@@ -18,6 +16,17 @@ class ClipboardSuggestionController(private val context: Context, private val on
     private val dismissal = context.getSharedPreferences("clipboard_suggestion_dismissal", Context.MODE_PRIVATE)
     private var connection: InputConnection? = null
     private var sensitive = true
+    private var sessionActive = false
+    private var lastObservedIdentity: String? = null
+    private var eligibleIdentity: String? = null
+
+    fun startSession() {
+        sessionActive = true
+        lastObservedIdentity = currentClipboardIdentity()
+        eligibleIdentity = null
+        identity = null
+        publish(null)
+    }
 
     fun updateEditor(ic: InputConnection?, isSensitive: Boolean) {
         connection = ic
@@ -25,20 +34,27 @@ class ClipboardSuggestionController(private val context: Context, private val on
         refresh()
     }
 
-    fun clipboardChanged() {
-        // Android can notify again when IME access resumes without a new copy.
+    /** Returns true only when the primary clip's identity has actually changed this session. */
+    fun clipboardChanged(): Boolean {
+        if (!sessionActive) return false
+        val current = currentClipboardIdentity()
+        if (current == lastObservedIdentity) return false
+        lastObservedIdentity = current
+        eligibleIdentity = current
         refresh()
+        return true
     }
 
     fun refresh() {
-        if (sensitive || connection == null) { publish(null); return }
+        if (!sessionActive || sensitive || connection == null) { identity = null; publish(null); return }
         val clip = runCatching { clipboard.primaryClip }.getOrNull()
         val text = clip?.plainTextOnly()
-        if (text.isNullOrBlank()) { publish(null); return }
-        val stamp = if (Build.VERSION.SDK_INT >= 26) clip?.description?.timestamp ?: 0L else 0L
-        val key = MessageDigest.getInstance("SHA-256")
-            .digest("$stamp:$text".toByteArray(Charsets.UTF_8))
-            .joinToString("") { "%02x".format(it.toInt() and 0xff) }
+        val key = clip?.identityFingerprint()
+        if (text.isNullOrBlank() || key == null || key != eligibleIdentity) {
+            identity = null
+            publish(null)
+            return
+        }
         identity = key
         publish(if (dismissal.getString("item", null) == key) null else ClipboardSuggestion(key, text))
     }
@@ -60,9 +76,17 @@ class ClipboardSuggestionController(private val context: Context, private val on
     }
 
     fun stop() {
-        connection = null; sensitive = true
+        sessionActive = false
+        lastObservedIdentity = null
+        eligibleIdentity = null
+        connection = null
+        sensitive = true
+        identity = null
         publish(null)
     }
+
+    private fun currentClipboardIdentity(): String? =
+        runCatching { clipboard.primaryClip?.identityFingerprint() }.getOrNull()
 
     private fun publish(value: ClipboardSuggestion?) {
         if (suggestion != value) { suggestion = value; onChanged() }
