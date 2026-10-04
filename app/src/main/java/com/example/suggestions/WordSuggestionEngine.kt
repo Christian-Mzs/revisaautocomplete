@@ -39,18 +39,32 @@ class WordSuggestionEngine(private val context: Context) {
             val corrections = ArrayList<Correction>()
             for (length in (query.length - MAX_EDIT_DISTANCE).coerceAtLeast(1)..(query.length + MAX_EDIT_DISTANCE)) {
                 for (candidate in data.byLength[length].orEmpty()) {
-                    if (candidate.word.equals(input, ignoreCase = true) || candidate.folded == query) continue
+                    if (candidate.folded.length < MIN_CORRECTION_LENGTH ||
+                        candidate.word.equals(input, ignoreCase = true) || candidate.folded == query) continue
                     val distance = optimalStringAlignment(query, candidate.folded, MAX_EDIT_DISTANCE)
-                    if (distance in 1..MAX_EDIT_DISTANCE) corrections += Correction(candidate, distance)
+                    if (distance in 1..MAX_EDIT_DISTANCE) {
+                        val preservesOrder = isSubsequence(query, candidate.folded) || isSubsequence(candidate.folded, query)
+                        corrections += Correction(candidate, distance, preservesOrder)
+                    }
                 }
             }
-            corrections.sortedWith(compareBy<Correction>({ it.distance }, { commonPrefixLength(query, it.entry.folded) * -1 }, { it.entry.word.length }, { it.entry.word }))
+            corrections.sortedWith(compareBy<Correction>(
+                { it.distance }, { !it.preservesOrder }, { commonPrefixLength(query, it.entry.folded) * -1 },
+                { it.entry.word.length }, { it.entry.word.lowercase(Locale.ROOT) }
+            ))
                 .forEach { suggestions += matchCase(input, it.entry.word) }
         }
         return suggestions.take(limit)
     }
 
-    private data class Correction(val entry: Entry, val distance: Int)
+    private data class Correction(val entry: Entry, val distance: Int, val preservesOrder: Boolean)
+
+    private fun isSubsequence(shorter: String, longer: String): Boolean {
+        if (shorter.length > longer.length) return false
+        var index = 0
+        for (char in longer) if (index < shorter.length && char == shorter[index]) index++
+        return index == shorter.length
+    }
 
     private fun load(language: KeyboardLanguage): Loaded {
         val entries = ArrayList<Entry>()
