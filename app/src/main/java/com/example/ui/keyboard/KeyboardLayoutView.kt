@@ -206,12 +206,12 @@ class KeyboardLayoutView(
     }
 
     private fun renderIdleToolbar() {
-        if (controller.currentMode == KeyboardMode.LETTERS && controller.wordSuggestions.isNotEmpty()) {
-            renderWordSuggestions()
-            return
-        }
         controller.clipboardSuggestion.suggestion?.let {
             renderClipboardSuggestion(it)
+            return
+        }
+        if (controller.currentMode == KeyboardMode.LETTERS && controller.wordSuggestions.isNotEmpty()) {
+            renderWordSuggestions()
             return
         }
         val row = LinearLayout(context).apply {

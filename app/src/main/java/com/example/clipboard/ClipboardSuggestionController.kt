@@ -34,14 +34,16 @@ class ClipboardSuggestionController(private val context: Context, private val on
         refresh()
     }
 
-    /** Returns true only when the primary clip's identity has actually changed this session. */
+    /** Returns true when the primary clip changes, even while the keyboard view is hidden. */
     fun clipboardChanged(): Boolean {
-        if (!sessionActive) return false
         val current = currentClipboardIdentity()
         if (current == lastObservedIdentity) return false
         lastObservedIdentity = current
-        eligibleIdentity = current
-        refresh()
+        if (sessionActive) {
+            // A clip copied in a sensitive field must not become a later suggestion.
+            eligibleIdentity = if (sensitive) null else current
+            refresh()
+        }
         return true
     }
 
@@ -77,7 +79,7 @@ class ClipboardSuggestionController(private val context: Context, private val on
 
     fun stop() {
         sessionActive = false
-        lastObservedIdentity = null
+        lastObservedIdentity = currentClipboardIdentity()
         eligibleIdentity = null
         connection = null
         sensitive = true

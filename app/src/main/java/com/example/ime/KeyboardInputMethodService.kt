@@ -22,9 +22,8 @@ class KeyboardInputMethodService : android.inputmethodservice.InputMethodService
     private var keyboardLayoutView: KeyboardLayoutView? = null
 
     private val clipboardListener = android.content.ClipboardManager.OnPrimaryClipChangedListener {
-        if (keyboardController.clipboardSuggestion.clipboardChanged() &&
-            !keyboardController.isSensitiveField
-        ) {
+        val changed = keyboardController.clipboardSuggestion.clipboardChanged()
+        if (changed && !keyboardController.isSensitiveField) {
             keyboardController.clipboardHistory.capture()
             keyboardLayoutView?.refreshClipboard()
         }
